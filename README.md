@@ -69,7 +69,7 @@ Copy the environment template and set your own credentials:
 $ cp .env.example .env
 ```
 
-`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` and `POSTGRES_PORT`.
+`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` and `DATABASE_URL`. Keep `DATABASE_URL` in sync with the PostgreSQL credentials.
 
 ### Start and stop
 
@@ -95,6 +95,30 @@ Data is stored in the named volume `postgres_data`, so it survives container res
 
 ```bash
 $ docker compose down -v
+```
+
+## Prisma ORM
+
+Prisma Client connects using `DATABASE_URL`. The client is generated into `src/generated/prisma` (ignored by Git) on `npm install` and before every build. Run `npx prisma generate` after changing `prisma/schema.prisma`.
+
+The CLI configuration lives in `prisma7.config.ts`; run Prisma commands from the project root.
+
+### Migrations
+
+No models or tables exist yet. Once models are added to `prisma/schema.prisma`:
+
+```bash
+# create and apply a migration in development (also regenerates the client)
+$ npx prisma migrate dev --name <migration_name>
+
+# apply pending migrations in production
+$ npx prisma migrate deploy
+
+# check migration status
+$ npx prisma migrate status
+
+# reset the database and reapply all migrations (destructive)
+$ npx prisma migrate reset
 ```
 
 ## Deployment
