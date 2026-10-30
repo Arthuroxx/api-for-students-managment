@@ -57,6 +57,46 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Database (PostgreSQL)
+
+The database runs in Docker Compose. Docker Engine and Docker Compose are required.
+
+### Setup
+
+Copy the environment template and set your own credentials:
+
+```bash
+$ cp .env.example .env
+```
+
+`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` and `POSTGRES_PORT`.
+
+### Start and stop
+
+```bash
+# start PostgreSQL in the background
+$ docker compose up -d
+
+# check status and health
+$ docker compose ps
+
+# follow logs
+$ docker compose logs -f postgres
+
+# stop the containers (data is kept)
+$ docker compose down
+```
+
+PostgreSQL is exposed on `localhost:${POSTGRES_PORT}` (default `5432`).
+
+### Data persistence
+
+Data is stored in the named volume `postgres_data`, so it survives container restarts and `docker compose down`. To delete the data as well:
+
+```bash
+$ docker compose down -v
+```
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
