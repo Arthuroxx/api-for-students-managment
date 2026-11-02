@@ -1,11 +1,36 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, Student } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
+import { StudentResponse, studentPublicSelect } from './students.select.js';
 
 @Injectable()
 export class StudentsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async findAll(): Promise<StudentResponse[]> {
+    return this.prisma.student.findMany({
+      select: studentPublicSelect,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findOne(id: string): Promise<StudentResponse> {
+    const student = await this.prisma.student.findUnique({
+      where: { id },
+      select: studentPublicSelect,
+    });
+
+    if (!student) {
+      throw new NotFoundException(`Student with id "${id}" not found`);
+    }
+
+    return student;
+  }
 
   async create(createStudentDto: CreateStudentDto): Promise<Student> {
     try {
