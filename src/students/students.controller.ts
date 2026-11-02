@@ -6,10 +6,12 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { Student } from '../generated/prisma/client.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
+import { UpdateStudentDto } from './dto/update-student.dto.js';
 import { StudentResponse } from './students.select.js';
 import { StudentsService } from './students.service.js';
 
@@ -25,6 +27,14 @@ export class StudentsController {
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<StudentResponse> {
     return this.studentsService.findOne(id);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateStudentDto: UpdateStudentDto,
+  ): Promise<StudentResponse> {
+    return this.studentsService.update(id, updateStudentDto);
   }
 
   @Post()
