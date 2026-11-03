@@ -1,15 +1,19 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
-import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { configureApp } from './../src/app.setup.js';
 import { PrismaService } from './../src/prisma/prisma.service.js';
+import {
+  createAuthenticatedRequest,
+  createTestAccessToken,
+} from './utils/auth.js';
 
 describe('Students update (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let authRequest: ReturnType<typeof createAuthenticatedRequest>;
   const runTag = `students-update-${Date.now()}`;
   const original = {
     firstName: 'Original',
@@ -31,6 +35,7 @@ describe('Students update (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    authRequest = createAuthenticatedRequest(app, createTestAccessToken(app));
 
     const target = await prisma.student.create({
       data: {
@@ -60,7 +65,7 @@ describe('Students update (e2e)', () => {
   });
 
   it('PATCH /students/:id updates only the provided fields', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .patch(`/students/${targetId}`)
       .send({ firstName: 'Updated', birthDate: '2002-03-04' })
       .expect(200);
@@ -92,7 +97,7 @@ describe('Students update (e2e)', () => {
       where: { id: otherId },
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .patch(`/students/${targetId}`)
       .send({ email: other.email })
       .expect(409);
@@ -112,7 +117,7 @@ describe('Students update (e2e)', () => {
       where: { id: otherId },
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .patch(`/students/${targetId}`)
       .send({ documentNumber: other.documentNumber })
       .expect(409);
@@ -130,7 +135,7 @@ describe('Students update (e2e)', () => {
   it('PATCH /students/:id returns 404 when the student does not exist', async () => {
     const missingId = randomUUID();
 
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .patch(`/students/${missingId}`)
       .send({ firstName: 'Ghost' })
       .expect(404);
@@ -141,24 +146,24 @@ describe('Students update (e2e)', () => {
   });
 
   it('PATCH /students/:id returns 400 for invalid data', async () => {
-    await request(app.getHttpServer())
+    await authRequest
       .patch(`/students/${targetId}`)
       .send({ email: 'not-an-email' })
       .expect(400);
 
-    await request(app.getHttpServer())
+    await authRequest
       .patch(`/students/${targetId}`)
       .send({ birthDate: '2000-02-30' })
       .expect(400);
 
-    await request(app.getHttpServer())
+    await authRequest
       .patch(`/students/${targetId}`)
       .send({ firstName: '' })
       .expect(400);
   });
 
   it('PATCH /students/:id rejects internal fields', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .patch(`/students/${targetId}`)
       .send({
         id: randomUUID(),
@@ -182,7 +187,7 @@ describe('Students update (e2e)', () => {
   });
 
   it('PATCH /students/:id returns 400 for a malformed id', async () => {
-    await request(app.getHttpServer())
+    await authRequest
       .patch('/students/not-a-uuid')
       .send({ firstName: 'Updated' })
       .expect(400);

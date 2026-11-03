@@ -1,11 +1,14 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
-import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { configureApp } from './../src/app.setup.js';
 import { PrismaService } from './../src/prisma/prisma.service.js';
+import {
+  createAuthenticatedRequest,
+  createTestAccessToken,
+} from './utils/auth.js';
 
 const PUBLIC_FIELDS = [
   'id',
@@ -21,6 +24,7 @@ const PUBLIC_FIELDS = [
 describe('Students read (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let authRequest: ReturnType<typeof createAuthenticatedRequest>;
   const runTag = `students-read-${Date.now()}`;
   const createdIds: string[] = [];
   let firstId: string;
@@ -36,6 +40,7 @@ describe('Students read (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    authRequest = createAuthenticatedRequest(app, createTestAccessToken(app));
 
     const first = await prisma.student.create({
       data: {
@@ -72,7 +77,7 @@ describe('Students read (e2e)', () => {
   });
 
   it('GET /students returns persisted students without internal fields', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .get('/students')
       .query({ firstName: 'Read' })
       .expect(200);
@@ -102,9 +107,7 @@ describe('Students read (e2e)', () => {
   });
 
   it('GET /students/:id returns the requested student', async () => {
-    const response = await request(app.getHttpServer())
-      .get(`/students/${firstId}`)
-      .expect(200);
+    const response = await authRequest.get(`/students/${firstId}`).expect(200);
 
     expect(response.body).toMatchObject({
       id: firstId,
@@ -120,7 +123,7 @@ describe('Students read (e2e)', () => {
   it('GET /students/:id returns 404 when the student does not exist', async () => {
     const missingId = randomUUID();
 
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .get(`/students/${missingId}`)
       .expect(404);
 
@@ -131,6 +134,6 @@ describe('Students read (e2e)', () => {
   });
 
   it('GET /students/:id returns 400 for a malformed id', async () => {
-    await request(app.getHttpServer()).get('/students/not-a-uuid').expect(400);
+    await authRequest.get('/students/not-a-uuid').expect(400);
   });
 });
