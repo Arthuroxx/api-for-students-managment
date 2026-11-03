@@ -69,7 +69,7 @@ Copy the environment template and set your own credentials:
 $ cp .env.example .env
 ```
 
-`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `NODE_ENV`, `PORT` and `CORS_ORIGINS`. Keep `DATABASE_URL` in sync with the PostgreSQL credentials. `CORS_ORIGINS` accepts a comma-separated list of allowed origins; leave it empty to disable cross-origin requests. Environment variables are validated when the application starts.
+`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `NODE_ENV`, `PORT`, `CORS_ORIGINS`, `JWT_SECRET`, `JWT_EXPIRES_IN_SECONDS`, `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`. Keep `DATABASE_URL` in sync with the PostgreSQL credentials. `CORS_ORIGINS` accepts a comma-separated list of allowed origins; leave it empty to disable cross-origin requests. `JWT_SECRET` must contain at least 32 characters. Environment variables are validated when the application starts.
 
 ### Start and stop
 
@@ -105,7 +105,7 @@ The CLI configuration lives in `prisma7.config.ts`; run Prisma commands from the
 
 ### Migrations
 
-No models or tables exist yet. Once models are added to `prisma/schema.prisma`:
+The schema currently defines the `Student` and `User` models. After changing `prisma/schema.prisma`:
 
 ```bash
 # create and apply a migration in development (also regenerates the client)
@@ -121,9 +121,34 @@ $ npx prisma migrate status
 $ npx prisma migrate reset
 ```
 
+## Authentication
+
+Passwords are hashed with Argon2id. Create or update the initial user from `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`:
+
+```bash
+$ npm run db:seed
+```
+
+Log in with `POST /auth/login`:
+
+```json
+{
+  "email": "admin@example.com",
+  "password": "change_me"
+}
+```
+
+The response contains an `accessToken`, its `tokenType` (`Bearer`) and `expiresIn` (seconds). Send the token on protected student endpoints:
+
+```
+Authorization: Bearer <accessToken>
+```
+
+All `/students` endpoints require a valid, unexpired JWT. The root endpoint and `POST /auth/login` are public.
+
 ## API documentation
 
-Swagger UI is available at `/api/docs` while the API is running (for example, `http://localhost:3000/api/docs`). The OpenAPI JSON document is served at `/api/docs-json`.
+Swagger UI is available at `/api/docs` while the API is running (for example, `http://localhost:3000/api/docs`). The OpenAPI JSON document is served at `/api/docs-json`. Use the **Authorize** button to provide a Bearer token when trying protected endpoints.
 
 ## Deployment
 

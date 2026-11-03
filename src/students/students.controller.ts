@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -21,7 +23,9 @@ import {
   ApiOperation,
   ApiParam,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { ErrorResponseDto } from '../common/dto/error-response.dto.js';
 import { Student } from '../generated/prisma/client.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
@@ -41,6 +45,8 @@ const studentIdParam = {
 };
 
 @ApiTags('Students')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('students')
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
@@ -57,6 +63,10 @@ export class StudentsController {
   })
   @ApiBadRequestResponse({
     description: 'Invalid pagination or filter values',
+    type: ErrorResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token',
     type: ErrorResponseDto,
   })
   findAll(
@@ -78,6 +88,10 @@ export class StudentsController {
   })
   @ApiNotFoundResponse({
     description: 'Student not found',
+    type: ErrorResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token',
     type: ErrorResponseDto,
   })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<StudentResponse> {
@@ -107,6 +121,10 @@ export class StudentsController {
     description: 'Email or document number already in use',
     type: ErrorResponseDto,
   })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token',
+    type: ErrorResponseDto,
+  })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateStudentDto: UpdateStudentDto,
@@ -126,6 +144,10 @@ export class StudentsController {
     description: 'Student not found',
     type: ErrorResponseDto,
   })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token',
+    type: ErrorResponseDto,
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.studentsService.remove(id);
@@ -143,6 +165,10 @@ export class StudentsController {
   })
   @ApiConflictResponse({
     description: 'Email or document number already in use',
+    type: ErrorResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token',
     type: ErrorResponseDto,
   })
   @HttpCode(HttpStatus.CREATED)
