@@ -121,6 +121,10 @@ $ npx prisma migrate status
 $ npx prisma migrate reset
 ```
 
+## API documentation
+
+Swagger UI is available at `/api/docs` while the API is running (for example, `http://localhost:3000/api/docs`). The OpenAPI JSON document is served at `/api/docs-json`.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

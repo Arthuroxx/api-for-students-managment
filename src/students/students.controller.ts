@@ -11,19 +11,54 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
+import { ErrorResponseDto } from '../common/dto/error-response.dto.js';
 import { Student } from '../generated/prisma/client.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
 import { ListStudentsQueryDto } from './dto/list-students-query.dto.js';
+import { PaginatedStudentsResponseDto } from './dto/paginated-students-response.dto.js';
+import { StudentResponseDto } from './dto/student-response.dto.js';
 import { UpdateStudentDto } from './dto/update-student.dto.js';
 import { StudentResponse } from './students.select.js';
 import { PaginatedStudentsResponse } from './students.types.js';
 import { StudentsService } from './students.service.js';
 
+const studentIdParam = {
+  name: 'id',
+  description: 'Student unique identifier',
+  format: 'uuid',
+  example: 'e6d9f2c1-8b34-4f8f-9c94-5c1f0f2b7a11',
+};
+
+@ApiTags('Students')
 @Controller('students')
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
 
   @Get()
+  @ApiOperation({
+    summary: 'List students',
+    description:
+      'Returns a paginated list of students with optional case-insensitive partial filters.',
+  })
+  @ApiOkResponse({
+    description: 'Paginated list of students',
+    type: PaginatedStudentsResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid pagination or filter values',
+    type: ErrorResponseDto,
+  })
   findAll(
     @Query() query: ListStudentsQueryDto,
   ): Promise<PaginatedStudentsResponse> {
@@ -31,11 +66,47 @@ export class StudentsController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get a student by ID' })
+  @ApiParam(studentIdParam)
+  @ApiOkResponse({
+    description: 'Student found',
+    type: StudentResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid student ID',
+    type: ErrorResponseDto,
+  })
+  @ApiNotFoundResponse({
+    description: 'Student not found',
+    type: ErrorResponseDto,
+  })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<StudentResponse> {
     return this.studentsService.findOne(id);
   }
 
   @Patch(':id')
+  @ApiOperation({
+    summary: 'Partially update a student',
+    description:
+      'Updates only the provided student fields. Internal fields cannot be modified.',
+  })
+  @ApiParam(studentIdParam)
+  @ApiOkResponse({
+    description: 'Student updated',
+    type: StudentResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid student ID or input data',
+    type: ErrorResponseDto,
+  })
+  @ApiNotFoundResponse({
+    description: 'Student not found',
+    type: ErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'Email or document number already in use',
+    type: ErrorResponseDto,
+  })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateStudentDto: UpdateStudentDto,
@@ -44,12 +115,36 @@ export class StudentsController {
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: 'Delete a student' })
+  @ApiParam(studentIdParam)
+  @ApiNoContentResponse({ description: 'Student deleted' })
+  @ApiBadRequestResponse({
+    description: 'Invalid student ID',
+    type: ErrorResponseDto,
+  })
+  @ApiNotFoundResponse({
+    description: 'Student not found',
+    type: ErrorResponseDto,
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.studentsService.remove(id);
   }
 
   @Post()
+  @ApiOperation({ summary: 'Create a student' })
+  @ApiCreatedResponse({
+    description: 'Student created',
+    type: StudentResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid input data',
+    type: ErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'Email or document number already in use',
+    type: ErrorResponseDto,
+  })
   @HttpCode(HttpStatus.CREATED)
   create(@Body() createStudentDto: CreateStudentDto): Promise<Student> {
     return this.studentsService.create(createStudentDto);
