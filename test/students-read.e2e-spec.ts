@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
+import { configureApp } from './../src/app.setup.js';
 import { PrismaService } from './../src/prisma/prisma.service.js';
 
 const PUBLIC_FIELDS = [
@@ -31,6 +32,7 @@ describe('Students read (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    configureApp(app);
     await app.init();
 
     prisma = app.get(PrismaService);
@@ -72,14 +74,29 @@ describe('Students read (e2e)', () => {
   it('GET /students returns persisted students without internal fields', async () => {
     const response = await request(app.getHttpServer())
       .get('/students')
+      .query({ firstName: 'Read' })
       .expect(200);
 
-    const students = response.body as Record<string, unknown>[];
-    const ids = students.map((student) => student.id);
+    const body = response.body as {
+      data: Record<string, unknown>[];
+      meta: {
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+      };
+    };
+    const ids = body.data.map((student) => student.id);
 
     expect(ids).toEqual(expect.arrayContaining([firstId, secondId]));
+    expect(body.meta).toEqual({
+      total: 2,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+    });
 
-    for (const student of students) {
+    for (const student of body.data) {
       expect(Object.keys(student).sort()).toEqual(PUBLIC_FIELDS);
     }
   });
