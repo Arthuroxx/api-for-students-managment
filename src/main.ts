@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule, ObserveInstrument } from './app.module.js';
 import { configureApp } from './app.setup.js';
@@ -10,6 +11,8 @@ async function bootstrap() {
   configureApp(app);
   setupSwagger(app);
   app.enableShutdownHooks();
-  await app.listen(process.env.PORT ?? 3000);
+
+  const configService = app.get(ConfigService);
+  await app.listen(configService.getOrThrow<number>('PORT'));
 }
 await bootstrap();
