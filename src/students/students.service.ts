@@ -54,6 +54,14 @@ export class StudentsService {
     }
   }
 
+  async remove(id: string): Promise<void> {
+    try {
+      await this.prisma.student.delete({ where: { id } });
+    } catch (error) {
+      this.handlePrismaError(error, id);
+    }
+  }
+
   async create(createStudentDto: CreateStudentDto): Promise<Student> {
     try {
       return await this.prisma.student.create({
