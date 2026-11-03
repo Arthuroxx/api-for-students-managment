@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -35,6 +36,12 @@ export class StudentsController {
     @Body() updateStudentDto: UpdateStudentDto,
   ): Promise<StudentResponse> {
     return this.studentsService.update(id, updateStudentDto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.studentsService.remove(id);
   }
 
   @Post()
