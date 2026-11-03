@@ -10,9 +10,16 @@ interface OpenApiOperation {
   parameters?: Array<{ name: string; in: string }>;
   requestBody?: unknown;
   responses?: Record<string, unknown>;
+  security?: unknown[];
 }
 
 interface OpenApiDocument {
+  components?: {
+    securitySchemes?: Record<
+      string,
+      { type: string; scheme: string; bearerFormat?: string }
+    >;
+  };
   paths: Record<string, Record<string, OpenApiOperation>>;
 }
 
@@ -51,14 +58,38 @@ describe('Swagger documentation (e2e)', () => {
     const document = response.body as OpenApiDocument;
     const paths = document.paths;
 
+    expect(paths).toHaveProperty('/auth/login');
     expect(paths).toHaveProperty('/students');
     expect(paths).toHaveProperty('/students/{id}');
 
+    expect(paths['/auth/login']).toHaveProperty('post');
     expect(paths['/students']).toHaveProperty('get');
     expect(paths['/students']).toHaveProperty('post');
     expect(paths['/students/{id}']).toHaveProperty('get');
     expect(paths['/students/{id}']).toHaveProperty('patch');
     expect(paths['/students/{id}']).toHaveProperty('delete');
+  });
+
+  it('documents Bearer authentication for protected endpoints', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/docs-json')
+      .expect(200);
+
+    const document = response.body as OpenApiDocument;
+    const collection = document.paths['/students'];
+    const byId = document.paths['/students/{id}'];
+
+    expect(document.components?.securitySchemes?.bearer).toMatchObject({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+    });
+    expect(document.paths['/auth/login'].post.security).toBeUndefined();
+    expect(collection.get.security).toEqual([{ bearer: [] }]);
+    expect(collection.post.security).toEqual([{ bearer: [] }]);
+    expect(byId.get.security).toEqual([{ bearer: [] }]);
+    expect(byId.patch.security).toEqual([{ bearer: [] }]);
+    expect(byId.delete.security).toEqual([{ bearer: [] }]);
   });
 
   it('documents query parameters, request bodies and status codes', async () => {
@@ -87,19 +118,19 @@ describe('Swagger documentation (e2e)', () => {
     expect(byId.patch.requestBody).toBeDefined();
 
     expect(Object.keys(collection.get.responses ?? {})).toEqual(
-      expect.arrayContaining(['200', '400']),
+      expect.arrayContaining(['200', '400', '401']),
     );
     expect(Object.keys(collection.post.responses ?? {})).toEqual(
-      expect.arrayContaining(['201', '400', '409']),
+      expect.arrayContaining(['201', '400', '401', '409']),
     );
     expect(Object.keys(byId.get.responses ?? {})).toEqual(
-      expect.arrayContaining(['200', '400', '404']),
+      expect.arrayContaining(['200', '400', '401', '404']),
     );
     expect(Object.keys(byId.patch.responses ?? {})).toEqual(
-      expect.arrayContaining(['200', '400', '404', '409']),
+      expect.arrayContaining(['200', '400', '401', '404', '409']),
     );
     expect(Object.keys(byId.delete.responses ?? {})).toEqual(
-      expect.arrayContaining(['204', '400', '404']),
+      expect.arrayContaining(['204', '400', '401', '404']),
     );
   });
 });

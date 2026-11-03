@@ -1,15 +1,19 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
-import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { configureApp } from './../src/app.setup.js';
 import { PrismaService } from './../src/prisma/prisma.service.js';
+import {
+  createAuthenticatedRequest,
+  createTestAccessToken,
+} from './utils/auth.js';
 
 describe('Students delete (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let authRequest: ReturnType<typeof createAuthenticatedRequest>;
   const runTag = `students-delete-${Date.now()}`;
   const createdIds: string[] = [];
   let targetId: string;
@@ -24,6 +28,7 @@ describe('Students delete (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    authRequest = createAuthenticatedRequest(app, createTestAccessToken(app));
 
     const target = await prisma.student.create({
       data: {
@@ -56,7 +61,7 @@ describe('Students delete (e2e)', () => {
   });
 
   it('DELETE /students/:id removes the student and returns 204', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .delete(`/students/${targetId}`)
       .expect(204);
 
@@ -67,13 +72,13 @@ describe('Students delete (e2e)', () => {
     });
     expect(persisted).toBeNull();
 
-    await request(app.getHttpServer()).get(`/students/${targetId}`).expect(404);
+    await authRequest.get(`/students/${targetId}`).expect(404);
   });
 
   it('DELETE /students/:id returns 404 when the student does not exist', async () => {
     const missingId = randomUUID();
 
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .delete(`/students/${missingId}`)
       .expect(404);
 
@@ -83,8 +88,6 @@ describe('Students delete (e2e)', () => {
   });
 
   it('DELETE /students/:id returns 400 for a malformed id', async () => {
-    await request(app.getHttpServer())
-      .delete('/students/not-a-uuid')
-      .expect(400);
+    await authRequest.delete('/students/not-a-uuid').expect(400);
   });
 });

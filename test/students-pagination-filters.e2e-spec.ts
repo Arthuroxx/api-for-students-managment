@@ -1,10 +1,13 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { configureApp } from './../src/app.setup.js';
 import { PrismaService } from './../src/prisma/prisma.service.js';
+import {
+  createAuthenticatedRequest,
+  createTestAccessToken,
+} from './utils/auth.js';
 import {
   DEFAULT_LIMIT,
   DEFAULT_PAGE,
@@ -31,6 +34,7 @@ interface StudentsPageBody {
 describe('Students pagination and filters (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let authRequest: ReturnType<typeof createAuthenticatedRequest>;
   const runTag = `pagination-${Date.now()}`;
   const createdIds: string[] = [];
 
@@ -44,6 +48,7 @@ describe('Students pagination and filters (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    authRequest = createAuthenticatedRequest(app, createTestAccessToken(app));
 
     for (let index = 0; index < 12; index += 1) {
       const student = await prisma.student.create({
@@ -71,7 +76,7 @@ describe('Students pagination and filters (e2e)', () => {
   });
 
   it('filters partially by firstName, ignores case and applies defaults', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .get('/students')
       .query({ firstName: `${runTag.toUpperCase()}-STUDENT` })
       .expect(200);
@@ -91,15 +96,15 @@ describe('Students pagination and filters (e2e)', () => {
   });
 
   it('paginates results without overlapping pages', async () => {
-    const firstPage = await request(app.getHttpServer())
+    const firstPage = await authRequest
       .get('/students')
       .query({ firstName: runTag, page: 1, limit: 5 })
       .expect(200);
-    const secondPage = await request(app.getHttpServer())
+    const secondPage = await authRequest
       .get('/students')
       .query({ firstName: runTag, page: 2, limit: 5 })
       .expect(200);
-    const thirdPage = await request(app.getHttpServer())
+    const thirdPage = await authRequest
       .get('/students')
       .query({ firstName: runTag, page: 3, limit: 5 })
       .expect(200);
@@ -128,7 +133,7 @@ describe('Students pagination and filters (e2e)', () => {
   });
 
   it('filters by lastName partially and ignoring case', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .get('/students')
       .query({ firstName: runTag, lastName: 'phagro' })
       .expect(200);
@@ -143,11 +148,11 @@ describe('Students pagination and filters (e2e)', () => {
   });
 
   it('filters by email partially and ignoring case', async () => {
-    const caseInsensitive = await request(app.getHttpServer())
+    const caseInsensitive = await authRequest
       .get('/students')
       .query({ firstName: runTag, email: runTag.toUpperCase() })
       .expect(200);
-    const partial = await request(app.getHttpServer())
+    const partial = await authRequest
       .get('/students')
       .query({ firstName: runTag, email: '.1' })
       .expect(200);
@@ -157,7 +162,7 @@ describe('Students pagination and filters (e2e)', () => {
   });
 
   it('returns an empty page when no student matches the filters', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .get('/students')
       .query({ firstName: runTag, email: 'no-match@example.com' })
       .expect(200);
@@ -174,29 +179,23 @@ describe('Students pagination and filters (e2e)', () => {
   });
 
   it('rejects invalid pagination parameters', async () => {
-    await request(app.getHttpServer())
-      .get('/students')
-      .query({ page: 0 })
-      .expect(400);
+    await authRequest.get('/students').query({ page: 0 }).expect(400);
 
-    await request(app.getHttpServer())
-      .get('/students')
-      .query({ limit: 0 })
-      .expect(400);
+    await authRequest.get('/students').query({ limit: 0 }).expect(400);
 
-    await request(app.getHttpServer())
+    await authRequest
       .get('/students')
       .query({ limit: MAX_LIMIT + 1 })
       .expect(400);
 
-    await request(app.getHttpServer())
+    await authRequest
       .get('/students')
       .query({ page: 'not-a-number' })
       .expect(400);
   });
 
   it('accepts the maximum allowed limit', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await authRequest
       .get('/students')
       .query({ firstName: runTag, limit: MAX_LIMIT })
       .expect(200);
