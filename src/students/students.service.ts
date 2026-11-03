@@ -6,18 +6,53 @@ import {
 import { Prisma, Student } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
+import { ListStudentsQueryDto } from './dto/list-students-query.dto.js';
 import { UpdateStudentDto } from './dto/update-student.dto.js';
 import { StudentResponse, studentPublicSelect } from './students.select.js';
+import { PaginatedStudentsResponse } from './students.types.js';
 
 @Injectable()
 export class StudentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(): Promise<StudentResponse[]> {
-    return this.prisma.student.findMany({
-      select: studentPublicSelect,
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(
+    query: ListStudentsQueryDto,
+  ): Promise<PaginatedStudentsResponse> {
+    const { page, limit, firstName, lastName, email } = query;
+    const where: Prisma.StudentWhereInput = {};
+
+    if (firstName) {
+      where.firstName = { contains: firstName, mode: 'insensitive' };
+    }
+
+    if (lastName) {
+      where.lastName = { contains: lastName, mode: 'insensitive' };
+    }
+
+    if (email) {
+      where.email = { contains: email, mode: 'insensitive' };
+    }
+
+    const [total, data] = await this.prisma.$transaction([
+      this.prisma.student.count({ where }),
+      this.prisma.student.findMany({
+        where,
+        select: studentPublicSelect,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: string): Promise<StudentResponse> {
