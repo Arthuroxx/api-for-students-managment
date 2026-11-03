@@ -69,7 +69,7 @@ Copy the environment template and set your own credentials:
 $ cp .env.example .env
 ```
 
-`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` and `DATABASE_URL`. Keep `DATABASE_URL` in sync with the PostgreSQL credentials.
+`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `NODE_ENV`, `PORT` and `CORS_ORIGINS`. Keep `DATABASE_URL` in sync with the PostgreSQL credentials. `CORS_ORIGINS` accepts a comma-separated list of allowed origins; leave it empty to disable cross-origin requests. Environment variables are validated when the application starts.
 
 ### Start and stop
 
