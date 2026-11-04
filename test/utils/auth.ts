@@ -2,14 +2,20 @@ import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
+import { UserRole } from '../../src/generated/prisma/enums.js';
 
 type SuperTest = ReturnType<typeof request>;
 type TestInstance = ReturnType<SuperTest['get']>;
 
-export function createTestAccessToken(app: INestApplication): string {
-  return app
-    .get(JwtService)
-    .sign({ sub: randomUUID(), email: 'e2e@example.com' });
+export function createTestAccessToken(
+  app: INestApplication,
+  role: UserRole = UserRole.ADMIN,
+): string {
+  return app.get(JwtService).sign({
+    sub: randomUUID(),
+    email: 'e2e@example.com',
+    role,
+  });
 }
 
 export function createAuthenticatedRequest(

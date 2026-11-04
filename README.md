@@ -123,7 +123,7 @@ $ npx prisma migrate reset
 
 ## Authentication
 
-Passwords are hashed with Argon2id. Create or update the initial user from `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`:
+Passwords are hashed with Argon2id. Create or update the initial `ADMIN` user from `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`:
 
 ```bash
 $ npm run db:seed
@@ -138,13 +138,24 @@ Log in with `POST /auth/login`:
 }
 ```
 
-The response contains an `accessToken`, its `tokenType` (`Bearer`) and `expiresIn` (seconds). Send the token on protected student endpoints:
+The response contains an `accessToken`, its `tokenType` (`Bearer`), `expiresIn` (seconds) and the user's `role`. Send the token on protected student endpoints:
 
 ```
 Authorization: Bearer <accessToken>
 ```
 
 All `/students` endpoints require a valid, unexpired JWT. The root endpoint and `POST /auth/login` are public.
+
+### Roles and permissions
+
+Users have one of two roles:
+
+| Role    | Permissions                                              |
+| ------- | -------------------------------------------------------- |
+| `ADMIN` | List, read, create, update and delete students           |
+| `USER`  | List and read students only                              |
+
+Role checks are enforced by `@Roles()` and `RolesGuard`; requests with an insufficient role receive `403 Forbidden`. Tokens without a valid role are rejected with `401 Unauthorized`. `npm run db:seed` assigns the `ADMIN` role to the seeded user.
 
 ## API documentation
 

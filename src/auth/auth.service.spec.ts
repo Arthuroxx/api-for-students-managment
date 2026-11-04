@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { UserRole } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuthService } from './auth.service.js';
 import { hashPassword } from './password.js';
@@ -30,11 +31,12 @@ describe('AuthService', () => {
     );
   });
 
-  it('returns a signed token for valid credentials', async () => {
+  it('returns a signed token with the user role for valid credentials', async () => {
     findUnique.mockResolvedValue({
       id: 'user-1',
       email,
       passwordHash,
+      role: UserRole.ADMIN,
     });
 
     const result = await service.login({
@@ -45,11 +47,16 @@ describe('AuthService', () => {
     expect(findUnique).toHaveBeenCalledWith({
       where: { email: 'user@example.com' },
     });
-    expect(signAsync).toHaveBeenCalledWith({ sub: 'user-1', email });
+    expect(signAsync).toHaveBeenCalledWith({
+      sub: 'user-1',
+      email,
+      role: UserRole.ADMIN,
+    });
     expect(result).toEqual({
       accessToken: 'signed-token',
       tokenType: 'Bearer',
       expiresIn: 3600,
+      role: UserRole.ADMIN,
     });
   });
 
@@ -67,6 +74,7 @@ describe('AuthService', () => {
       id: 'user-1',
       email,
       passwordHash,
+      role: UserRole.USER,
     });
 
     await expect(

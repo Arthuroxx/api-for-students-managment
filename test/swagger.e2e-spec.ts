@@ -11,6 +11,7 @@ interface OpenApiOperation {
   requestBody?: unknown;
   responses?: Record<string, unknown>;
   security?: unknown[];
+  description?: string;
 }
 
 interface OpenApiDocument {
@@ -92,6 +93,22 @@ describe('Swagger documentation (e2e)', () => {
     expect(byId.delete.security).toEqual([{ bearer: [] }]);
   });
 
+  it('documents the role required by each student operation', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/docs-json')
+      .expect(200);
+
+    const document = response.body as OpenApiDocument;
+    const collection = document.paths['/students'];
+    const byId = document.paths['/students/{id}'];
+
+    expect(collection.get.description).toContain('ADMIN or USER');
+    expect(byId.get.description).toContain('ADMIN or USER');
+    expect(collection.post.description).toContain('ADMIN');
+    expect(byId.patch.description).toContain('ADMIN');
+    expect(byId.delete.description).toContain('ADMIN');
+  });
+
   it('documents query parameters, request bodies and status codes', async () => {
     const response = await request(app.getHttpServer())
       .get('/api/docs-json')
@@ -118,19 +135,19 @@ describe('Swagger documentation (e2e)', () => {
     expect(byId.patch.requestBody).toBeDefined();
 
     expect(Object.keys(collection.get.responses ?? {})).toEqual(
-      expect.arrayContaining(['200', '400', '401']),
+      expect.arrayContaining(['200', '400', '401', '403']),
     );
     expect(Object.keys(collection.post.responses ?? {})).toEqual(
-      expect.arrayContaining(['201', '400', '401', '409']),
+      expect.arrayContaining(['201', '400', '401', '403', '409']),
     );
     expect(Object.keys(byId.get.responses ?? {})).toEqual(
-      expect.arrayContaining(['200', '400', '401', '404']),
+      expect.arrayContaining(['200', '400', '401', '403', '404']),
     );
     expect(Object.keys(byId.patch.responses ?? {})).toEqual(
-      expect.arrayContaining(['200', '400', '401', '404', '409']),
+      expect.arrayContaining(['200', '400', '401', '403', '404', '409']),
     );
     expect(Object.keys(byId.delete.responses ?? {})).toEqual(
-      expect.arrayContaining(['204', '400', '401', '404']),
+      expect.arrayContaining(['204', '400', '401', '403', '404']),
     );
   });
 });
