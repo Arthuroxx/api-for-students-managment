@@ -1,5 +1,6 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { UserRole } from '../../generated/prisma/enums.js';
 import { AuthenticatedUser } from '../auth.types.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 
@@ -9,7 +10,11 @@ interface MockRequest {
 }
 
 const secret = 'test-only-jwt-secret-with-at-least-32-chars';
-const payload = { sub: 'user-1', email: 'user@example.com' };
+const payload = {
+  sub: 'user-1',
+  email: 'user@example.com',
+  role: UserRole.ADMIN,
+};
 
 function createContext(request: MockRequest): ExecutionContext {
   return {
@@ -61,7 +66,7 @@ describe('JwtAuthGuard', () => {
   });
 
   it('rejects payloads without a subject', async () => {
-    const token = jwtService.sign({ email: payload.email });
+    const token = jwtService.sign({ email: payload.email, role: payload.role });
 
     await expect(
       guard.canActivate(
@@ -70,13 +75,27 @@ describe('JwtAuthGuard', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
-  it('attaches the authenticated user to the request', async () => {
+  it('rejects payloads with an invalid role', async () => {
+    const token = jwtService.sign({ ...payload, role: 'SUPERADMIN' });
+
+    await expect(
+      guard.canActivate(
+        createContext({ headers: { authorization: `Bearer ${token}` } }),
+      ),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('attaches the authenticated user with role to the request', async () => {
     const token = jwtService.sign(payload);
     const request: MockRequest = {
       headers: { authorization: `Bearer ${token}` },
     };
 
     await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
-    expect(request.user).toEqual({ id: payload.sub, email: payload.email });
+    expect(request.user).toEqual({
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+    });
   });
 });

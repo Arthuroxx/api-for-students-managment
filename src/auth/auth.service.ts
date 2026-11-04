@@ -35,7 +35,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
 
     return {
       accessToken: await this.jwtService.signAsync(payload),
@@ -43,6 +47,7 @@ export class AuthService {
       expiresIn: this.configService.getOrThrow<number>(
         'JWT_EXPIRES_IN_SECONDS',
       ),
+      role: user.role,
     };
   }
 }

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { hashPassword } from '../src/auth/password.js';
 import { PrismaClient } from '../src/generated/prisma/client.js';
+import { UserRole } from '../src/generated/prisma/enums.js';
 
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
@@ -26,12 +27,12 @@ async function main(): Promise<void> {
     const passwordHash = await hashPassword(password);
     const user = await prisma.user.upsert({
       where: { email },
-      update: { passwordHash },
-      create: { email, passwordHash },
-      select: { id: true, email: true },
+      update: { passwordHash, role: UserRole.ADMIN },
+      create: { email, passwordHash, role: UserRole.ADMIN },
+      select: { id: true, email: true, role: true },
     });
 
-    console.log(`Seeded user ${user.email} (${user.id})`);
+    console.log(`Seeded ${user.role} user ${user.email} (${user.id})`);
   } finally {
     await prisma.$disconnect();
   }

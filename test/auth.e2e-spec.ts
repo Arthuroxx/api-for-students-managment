@@ -8,12 +8,14 @@ import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { configureApp } from './../src/app.setup.js';
 import { hashPassword } from './../src/auth/password.js';
+import { UserRole } from './../src/generated/prisma/enums.js';
 import { PrismaService } from './../src/prisma/prisma.service.js';
 
 interface LoginResponseBody {
   accessToken: string;
   tokenType: string;
   expiresIn: number;
+  role: string;
 }
 
 describe('Authentication (e2e)', () => {
@@ -43,10 +45,18 @@ describe('Authentication (e2e)', () => {
       .getOrThrow<number>('JWT_EXPIRES_IN_SECONDS');
 
     const user = await prisma.user.create({
-      data: { email, passwordHash: await hashPassword(password) },
+      data: {
+        email,
+        passwordHash: await hashPassword(password),
+        role: UserRole.ADMIN,
+      },
     });
     userId = user.id;
-    accessToken = await jwtService.signAsync({ sub: userId, email });
+    accessToken = await jwtService.signAsync({
+      sub: userId,
+      email,
+      role: UserRole.ADMIN,
+    });
   });
 
   afterAll(async () => {
@@ -64,9 +74,14 @@ describe('Authentication (e2e)', () => {
 
     expect(body.tokenType).toBe('Bearer');
     expect(body.expiresIn).toBe(expectedExpiresIn);
+    expect(body.role).toBe(UserRole.ADMIN);
     await expect(
       jwtService.verifyAsync(body.accessToken),
-    ).resolves.toMatchObject({ sub: userId, email });
+    ).resolves.toMatchObject({
+      sub: userId,
+      email,
+      role: UserRole.ADMIN,
+    });
   });
 
   it('rejects invalid credentials with a generic message', async () => {
@@ -134,24 +149,22 @@ describe('Authentication (e2e)', () => {
       .expect(401);
   });
 
-  it('rejects invalid and expired tokens', async () => {
+  it('rejects invalid, expired, and role-less tokens', async () => {
     const invalidToken = jwtService.sign(
-      { sub: userId, email },
+      { sub: userId, email, role: UserRole.ADMIN },
       { secret: 'another-test-secret-with-32-characters-min' },
     );
     const expiredToken = jwtService.sign(
-      { sub: userId, email },
+      { sub: userId, email, role: UserRole.ADMIN },
       { expiresIn: -1 },
     );
+    const roleLessToken = jwtService.sign({ sub: userId, email });
 
-    await request(app.getHttpServer())
-      .get('/students')
-      .set('Authorization', `Bearer ${invalidToken}`)
-      .expect(401);
-
-    await request(app.getHttpServer())
-      .get('/students')
-      .set('Authorization', `Bearer ${expiredToken}`)
-      .expect(401);
+    for (const token of [invalidToken, expiredToken, roleLessToken]) {
+      await request(app.getHttpServer())
+        .get('/students')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(401);
+    }
   });
 });
