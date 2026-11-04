@@ -50,12 +50,19 @@ $ npm run start:prod
 # unit tests
 $ npm run test
 
-# e2e tests
+# e2e and integration tests
 $ npm run test:e2e
+
+# integration tests only
+$ npm run test:integration
 
 # test coverage
 $ npm run test:cov
 ```
+
+The e2e suite runs against an isolated PostgreSQL database. By default its URL is derived from `DATABASE_URL` by appending `_test` to the database name. The suite recreates and migrates that database on every run, executes test files sequentially, and truncates all tables between test files; the integration suite also resets data before every test. PostgreSQL must be running (`docker compose up -d`).
+
+To override the test database, copy `.env.test.example` to `.env.test` and set `TEST_DATABASE_URL`. The test database name must be `test` or end with `_test`; the suite refuses to recreate any other database. Never point it at development or production.
 
 ## Database (PostgreSQL)
 
@@ -69,7 +76,7 @@ Copy the environment template and set your own credentials:
 $ cp .env.example .env
 ```
 
-`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `NODE_ENV`, `PORT`, `CORS_ORIGINS`, `JWT_SECRET`, `JWT_EXPIRES_IN_SECONDS`, `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`. Keep `DATABASE_URL` in sync with the PostgreSQL credentials. `CORS_ORIGINS` accepts a comma-separated list of allowed origins; leave it empty to disable cross-origin requests. `JWT_SECRET` must contain at least 32 characters. Environment variables are validated when the application starts.
+`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `TEST_DATABASE_URL`, `NODE_ENV`, `PORT`, `CORS_ORIGINS`, `JWT_SECRET`, `JWT_EXPIRES_IN_SECONDS`, `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`. Keep `DATABASE_URL` in sync with the PostgreSQL credentials. `TEST_DATABASE_URL` is optional and configures the isolated e2e database. `CORS_ORIGINS` accepts a comma-separated list of allowed origins; leave it empty to disable cross-origin requests. `JWT_SECRET` must contain at least 32 characters. Environment variables are validated when the application starts.
 
 ### Start and stop
 
