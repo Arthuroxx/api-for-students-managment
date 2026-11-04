@@ -5,7 +5,7 @@ export function setupSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
     .setTitle('Student Management API')
     .setDescription(
-      'REST API for authenticating users and managing students. Obtain a JWT access token from POST /auth/login and send it as a Bearer token on protected endpoints.',
+      'REST API for authenticating users and managing students. Obtain a JWT access token from POST /auth/login and send it as a Bearer token on protected endpoints. ADMIN users can read and manage students, while USER users can only read them.',
     )
     .setVersion('1.0')
     .addTag('Auth')

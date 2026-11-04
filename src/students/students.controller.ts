@@ -17,6 +17,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -25,9 +26,12 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { Roles } from '../auth/decorators/roles.decorator.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { ErrorResponseDto } from '../common/dto/error-response.dto.js';
 import { Student } from '../generated/prisma/client.js';
+import { UserRole } from '../generated/prisma/enums.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
 import { ListStudentsQueryDto } from './dto/list-students-query.dto.js';
 import { PaginatedStudentsResponseDto } from './dto/paginated-students-response.dto.js';
@@ -46,16 +50,17 @@ const studentIdParam = {
 
 @ApiTags('Students')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('students')
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
 
   @Get()
+  @Roles(UserRole.ADMIN, UserRole.USER)
   @ApiOperation({
     summary: 'List students',
     description:
-      'Returns a paginated list of students with optional case-insensitive partial filters.',
+      'Requires the ADMIN or USER role. Returns a paginated list of students with optional case-insensitive partial filters.',
   })
   @ApiOkResponse({
     description: 'Paginated list of students',
@@ -69,6 +74,10 @@ export class StudentsController {
     description: 'Missing, invalid, or expired access token',
     type: ErrorResponseDto,
   })
+  @ApiForbiddenResponse({
+    description: 'Insufficient role permissions (ADMIN or USER required)',
+    type: ErrorResponseDto,
+  })
   findAll(
     @Query() query: ListStudentsQueryDto,
   ): Promise<PaginatedStudentsResponse> {
@@ -76,7 +85,11 @@ export class StudentsController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a student by ID' })
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  @ApiOperation({
+    summary: 'Get a student by ID',
+    description: 'Requires the ADMIN or USER role.',
+  })
   @ApiParam(studentIdParam)
   @ApiOkResponse({
     description: 'Student found',
@@ -94,15 +107,20 @@ export class StudentsController {
     description: 'Missing, invalid, or expired access token',
     type: ErrorResponseDto,
   })
+  @ApiForbiddenResponse({
+    description: 'Insufficient role permissions (ADMIN or USER required)',
+    type: ErrorResponseDto,
+  })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<StudentResponse> {
     return this.studentsService.findOne(id);
   }
 
   @Patch(':id')
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: 'Partially update a student',
     description:
-      'Updates only the provided student fields. Internal fields cannot be modified.',
+      'Requires the ADMIN role. Updates only the provided student fields. Internal fields cannot be modified.',
   })
   @ApiParam(studentIdParam)
   @ApiOkResponse({
@@ -125,6 +143,10 @@ export class StudentsController {
     description: 'Missing, invalid, or expired access token',
     type: ErrorResponseDto,
   })
+  @ApiForbiddenResponse({
+    description: 'Insufficient role permissions (ADMIN required)',
+    type: ErrorResponseDto,
+  })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateStudentDto: UpdateStudentDto,
@@ -133,7 +155,11 @@ export class StudentsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a student' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Delete a student',
+    description: 'Requires the ADMIN role.',
+  })
   @ApiParam(studentIdParam)
   @ApiNoContentResponse({ description: 'Student deleted' })
   @ApiBadRequestResponse({
@@ -148,13 +174,21 @@ export class StudentsController {
     description: 'Missing, invalid, or expired access token',
     type: ErrorResponseDto,
   })
+  @ApiForbiddenResponse({
+    description: 'Insufficient role permissions (ADMIN required)',
+    type: ErrorResponseDto,
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.studentsService.remove(id);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a student' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Create a student',
+    description: 'Requires the ADMIN role.',
+  })
   @ApiCreatedResponse({
     description: 'Student created',
     type: StudentResponseDto,
@@ -169,6 +203,10 @@ export class StudentsController {
   })
   @ApiUnauthorizedResponse({
     description: 'Missing, invalid, or expired access token',
+    type: ErrorResponseDto,
+  })
+  @ApiForbiddenResponse({
+    description: 'Insufficient role permissions (ADMIN required)',
     type: ErrorResponseDto,
   })
   @HttpCode(HttpStatus.CREATED)

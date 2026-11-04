@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { UserRole } from '../../generated/prisma/enums.js';
 
 export class LoginResponseDto {
   @ApiProperty({
@@ -18,4 +19,11 @@ export class LoginResponseDto {
     example: 3600,
   })
   expiresIn!: number;
+
+  @ApiProperty({
+    description: 'Role assigned to the authenticated user',
+    enum: UserRole,
+    example: UserRole.USER,
+  })
+  role!: UserRole;
 }
