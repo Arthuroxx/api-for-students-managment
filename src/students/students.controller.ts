@@ -30,7 +30,6 @@ import { Roles } from '../auth/decorators/roles.decorator.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { ErrorResponseDto } from '../common/dto/error-response.dto.js';
-import { Student } from '../generated/prisma/client.js';
 import { UserRole } from '../generated/prisma/enums.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
 import { ListStudentsQueryDto } from './dto/list-students-query.dto.js';
@@ -210,7 +209,7 @@ export class StudentsController {
     type: ErrorResponseDto,
   })
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() createStudentDto: CreateStudentDto): Promise<Student> {
+  create(@Body() createStudentDto: CreateStudentDto): Promise<StudentResponse> {
     return this.studentsService.create(createStudentDto);
   }
 }
