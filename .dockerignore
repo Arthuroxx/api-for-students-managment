@@ -1,0 +1,32 @@
+# Git and local tooling
+.git
+.gitignore
+.gitattributes
+.idea
+.vscode
+
+# Dependencies and build output (recreated inside the image)
+node_modules
+dist
+build
+*.tsbuildinfo
+coverage
+
+# Generated Prisma client (regenerated during the image build)
+src/generated
+
+# Local environment files; configuration is provided through Compose
+.env*
+
+# Tests, test configuration and local documentation
+test
+vitest.config.ts
+vitest.config.e2e.ts
+*.md
+AGENTS.md
+
+# Logs and temporary files
+logs
+*.log
+.temp
+.tmp
