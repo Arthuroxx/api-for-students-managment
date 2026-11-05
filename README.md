@@ -164,6 +164,30 @@ Users have one of two roles:
 
 Role checks are enforced by `@Roles()` and `RolesGuard`; requests with an insufficient role receive `403 Forbidden`. Tokens without a valid role are rejected with `401 Unauthorized`. `npm run db:seed` assigns the `ADMIN` role to the seeded user.
 
+## Health check
+
+`GET /health` is public and verifies that the API process is running and that PostgreSQL responds to a lightweight query. A healthy service returns `200`:
+
+```json
+{
+  "status": "ok",
+  "database": "up",
+  "uptimeSeconds": 123.45,
+  "timestamp": "2026-11-04T12:00:00.000Z"
+}
+```
+
+If PostgreSQL is unreachable, the endpoint returns `503` with `status: "error"` and `database: "down"`. Use it as the readiness and liveness probe for deployments and container orchestrators.
+
+## Logging and monitoring
+
+HTTP requests are logged through the NestJS `Logger` as structured JSON, so they can be ingested by any log collector:
+
+- `http_request` entries include `method`, `path`, `statusCode`, and `durationMs` for every request.
+- `http_error` entries include `method`, `path`, `statusCode`, and the error name. Client errors (`4xx`) are logged as warnings and server errors (`5xx`) as errors.
+
+Query strings, request bodies, headers, tokens, passwords, and exception messages or stack traces are never logged. Each entry is a single JSON line that includes a timestamp and the logger context added by NestJS.
+
 ## API documentation
 
 Swagger UI is available at `/api/docs` while the API is running (for example, `http://localhost:3000/api/docs`). The OpenAPI JSON document is served at `/api/docs-json`. Use the **Authorize** button to provide a Bearer token when trying protected endpoints.

@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
+import { Request } from 'express';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -24,14 +25,33 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const responseBody = this.buildResponseBody(exception, status);
 
-    if (!(exception instanceof HttpException)) {
-      this.logger.error(
-        'Unhandled exception',
-        exception instanceof Error ? exception.stack : String(exception),
-      );
-    }
+    this.logError(exception, status, context.getRequest<Request>());
 
     httpAdapter.reply(context.getResponse(), responseBody, status);
+  }
+
+  private logError(
+    exception: unknown,
+    status: number,
+    request?: Request,
+  ): void {
+    const method = request?.method ?? 'UNKNOWN';
+    const rawUrl = request?.originalUrl ?? request?.url ?? '/';
+    const path = rawUrl.split('?')[0] || '/';
+
+    const entry = JSON.stringify({
+      event: 'http_error',
+      method,
+      path,
+      statusCode: status,
+      error: exception instanceof Error ? exception.name : 'UnknownError',
+    });
+
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error(entry);
+    } else {
+      this.logger.warn(entry);
+    }
   }
 
   private buildResponseBody(
