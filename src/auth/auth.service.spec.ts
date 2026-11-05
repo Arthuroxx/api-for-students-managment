@@ -46,6 +46,12 @@ describe('AuthService', () => {
 
     expect(findUnique).toHaveBeenCalledWith({
       where: { email: 'user@example.com' },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        passwordHash: true,
+      },
     });
     expect(signAsync).toHaveBeenCalledWith({
       sub: 'user-1',

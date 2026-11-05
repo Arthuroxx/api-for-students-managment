@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, Student } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
 import { ListStudentsQueryDto } from './dto/list-students-query.dto.js';
@@ -33,16 +33,14 @@ export class StudentsService {
       where.email = { contains: email, mode: 'insensitive' };
     }
 
-    const [total, data] = await this.prisma.$transaction([
-      this.prisma.student.count({ where }),
-      this.prisma.student.findMany({
-        where,
-        select: studentPublicSelect,
-        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-    ]);
+    const data = await this.prisma.student.findMany({
+      where,
+      select: studentPublicSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    const total = await this.resolveTotal(where, page, limit, data.length);
 
     return {
       data,
@@ -97,7 +95,7 @@ export class StudentsService {
     }
   }
 
-  async create(createStudentDto: CreateStudentDto): Promise<Student> {
+  async create(createStudentDto: CreateStudentDto): Promise<StudentResponse> {
     try {
       return await this.prisma.student.create({
         data: {
@@ -107,10 +105,31 @@ export class StudentsService {
           documentNumber: createStudentDto.documentNumber,
           birthDate: new Date(createStudentDto.birthDate),
         },
+        select: studentPublicSelect,
       });
     } catch (error) {
       this.handlePrismaError(error);
     }
+  }
+
+  /**
+   * Returns the total number of matching students without always issuing a
+   * COUNT query. A partial page already tells us the exact total, so COUNT is
+   * only needed for a full page or an empty page after the first one.
+   */
+  private resolveTotal(
+    where: Prisma.StudentWhereInput,
+    page: number,
+    limit: number,
+    pageSize: number,
+  ): Promise<number> | number {
+    const isPartialPage = pageSize < limit;
+
+    if (isPartialPage && (page === 1 || pageSize > 0)) {
+      return (page - 1) * limit + pageSize;
+    }
+
+    return this.prisma.student.count({ where });
   }
 
   private buildUpdateData(

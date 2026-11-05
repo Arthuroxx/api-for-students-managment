@@ -19,7 +19,15 @@ export class AuthService {
 
   async login(loginDto: LoginDto): Promise<LoginResult> {
     const email = loginDto.email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        passwordHash: true,
+      },
+    });
 
     if (!user) {
       await verifyPassword(DUMMY_PASSWORD_HASH, loginDto.password);
