@@ -60,41 +60,92 @@ $ npm run test:integration
 $ npm run test:cov
 ```
 
-The e2e suite runs against an isolated PostgreSQL database. By default its URL is derived from `DATABASE_URL` by appending `_test` to the database name. The suite recreates and migrates that database on every run, executes test files sequentially, and truncates all tables between test files; the integration suite also resets data before every test. PostgreSQL must be running (`docker compose up -d`).
+The e2e suite runs against an isolated PostgreSQL database. By default its URL is derived from `DATABASE_URL` by appending `_test` to the database name. The suite recreates and migrates that database on every run, executes test files sequentially, and truncates all tables between test files; the integration suite also resets data before every test. PostgreSQL must be running (`docker compose up -d postgres`).
 
 To override the test database, copy `.env.test.example` to `.env.test` and set `TEST_DATABASE_URL`. The test database name must be `test` or end with `_test`; the suite refuses to recreate any other database. Never point it at development or production.
 
-## Database (PostgreSQL)
+## Docker Compose (API and PostgreSQL)
 
-The database runs in Docker Compose. Docker Engine and Docker Compose are required.
+The full stack runs with Docker Compose: a NestJS API container and a PostgreSQL 18 container. Docker Engine and Docker Compose v2 are required.
 
-### Setup
-
-Copy the environment template and set your own credentials:
+### Quick start
 
 ```bash
+# 1. create your local configuration
 $ cp .env.example .env
+
+# 2. set POSTGRES_PASSWORD and a JWT_SECRET of at least 32 characters in .env
+
+# 3. build the image, start PostgreSQL, apply migrations and start the API
+$ docker compose up --build -d
 ```
 
-`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `TEST_DATABASE_URL`, `NODE_ENV`, `PORT`, `CORS_ORIGINS`, `JWT_SECRET`, `JWT_EXPIRES_IN_SECONDS`, `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`. Keep `DATABASE_URL` in sync with the PostgreSQL credentials. `TEST_DATABASE_URL` is optional and configures the isolated e2e database. `CORS_ORIGINS` accepts a comma-separated list of allowed origins; leave it empty to disable cross-origin requests. `JWT_SECRET` must contain at least 32 characters. Environment variables are validated when the application starts.
+Verify that everything is running:
+
+```bash
+# all services should be running; app and postgres should be healthy
+# use `docker compose ps -a` to also see the migration service exited with code 0
+$ docker compose ps
+
+# the API and its database connection are healthy
+$ curl http://localhost:3000/health
+
+# follow application logs
+$ docker compose logs -f app
+```
+
+Swagger UI is available at `http://localhost:3000/api/docs`.
+
+`.env` is ignored by Git; never commit real credentials. The available variables are `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `TEST_DATABASE_URL`, `NODE_ENV`, `PORT`, `CORS_ORIGINS`, `JWT_SECRET`, `JWT_EXPIRES_IN_SECONDS`, `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`. Keep the host `DATABASE_URL` in sync with the PostgreSQL credentials; Compose builds its own internal URL. `TEST_DATABASE_URL` is optional and configures the isolated e2e database. `CORS_ORIGINS` accepts a comma-separated list of allowed origins; leave it empty to disable cross-origin requests. `JWT_SECRET` must contain at least 32 characters. Environment variables are validated when the application starts.
+
+### Container startup order and configuration
+
+- `postgres` starts first and becomes healthy through `pg_isready`.
+- `migrate` is a one-shot service that waits for PostgreSQL and runs `npx prisma migrate deploy`. It exits successfully once all migrations are applied.
+- `app` starts only after PostgreSQL is healthy and the migration service completed successfully (`service_completed_successfully`). Its image also defines a health check against `GET /health`.
+- Containers communicate over the Compose network using the service name `postgres`. Compose builds the internal `DATABASE_URL` from `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, so the container never uses `localhost` to reach the database.
+- `DATABASE_URL` in `.env` stays pointed at `localhost` for running the API directly with `npm run start:dev` on the host. `JWT_SECRET`, `JWT_EXPIRES_IN_SECONDS`, `PORT` and `CORS_ORIGINS` are passed to the API container as environment variables.
+- If `POSTGRES_PASSWORD` contains URL-reserved characters, URL-encode it in `DATABASE_URL` when running the API on the host. Compose builds the container URL from the same values, so prefer a URL-safe password.
+
+Create or update the initial `ADMIN` user in the running stack:
+
+```bash
+$ docker compose --profile seed run --rm seed
+```
+
+### Docker image
+
+The multi-stage `Dockerfile` builds:
+
+| Stage | Purpose |
+| --- | --- |
+| `base` | Node.js 24 slim image with OpenSSL and CA certificates. |
+| `deps` | Installs all dependencies and generates the Prisma client. |
+| `build` | Compiles the NestJS application with `nest build`. |
+| `production-deps` | Installs production dependencies only and rebuilds the native `argon2` binding. |
+| `runtime` | Minimal image with `dist` and production dependencies; runs as the non-root `node` user with a `/health` health check. |
+| `migrator` | Keeps the build dependencies and Prisma CLI to run `prisma migrate deploy` and the seed script. |
+
+`.dockerignore` keeps `node_modules`, `dist`, local environment files, tests and the generated Prisma client out of the build context. The Prisma client is regenerated inside the image from `prisma/schema.prisma`.
 
 ### Start and stop
 
 ```bash
-# start PostgreSQL in the background
-$ docker compose up -d
+# start only PostgreSQL for local development
+$ docker compose up -d postgres
 
 # check status and health
 $ docker compose ps
 
-# follow logs
+# follow database or API logs
 $ docker compose logs -f postgres
+$ docker compose logs -f app
 
 # stop the containers (data is kept)
 $ docker compose down
 ```
 
-PostgreSQL is exposed on `localhost:${POSTGRES_PORT}` (default `5432`).
+PostgreSQL is exposed on `localhost:${POSTGRES_PORT}` (default `5432`), and the API on `localhost:${PORT}` (default `3000`).
 
 ### Data persistence
 
@@ -103,6 +154,14 @@ Data is stored in the named volume `postgres_data`, so it survives container res
 ```bash
 $ docker compose down -v
 ```
+
+### Rebuilding after code changes
+
+```bash
+$ docker compose up --build -d
+```
+
+Compose reuses cached layers, so only changed stages are rebuilt. The `app` container is recreated with the new image after the migration service succeeds.
 
 ## Prisma ORM
 
