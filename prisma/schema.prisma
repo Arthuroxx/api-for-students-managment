@@ -20,6 +20,12 @@ model Student {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // Matches the default listing order: newest first, with id as a stable tie-breaker.
+  @@index([createdAt(sort: Desc), id], map: "students_createdAt_id_idx")
+  // Trigram indexes accelerate the case-insensitive partial filters (ILIKE '%term%').
+  @@index([firstName(ops: raw("gin_trgm_ops"))], type: Gin, map: "students_firstName_trgm_idx")
+  @@index([lastName(ops: raw("gin_trgm_ops"))], type: Gin, map: "students_lastName_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "students_email_trgm_idx")
   @@map("students")
 }
 

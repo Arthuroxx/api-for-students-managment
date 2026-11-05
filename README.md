@@ -192,6 +192,42 @@ Query strings, request bodies, headers, tokens, passwords, and exception message
 
 Swagger UI is available at `/api/docs` while the API is running (for example, `http://localhost:3000/api/docs`). The OpenAPI JSON document is served at `/api/docs-json`. Use the **Authorize** button to provide a Bearer token when trying protected endpoints.
 
+## Performance
+
+### Database indexes
+
+Student search uses case-insensitive partial matches (`ILIKE '%term%'`), which cannot use a regular B-tree index. The `20261105090000_add_student_performance_indexes` migration enables the `pg_trgm` extension and adds:
+
+| Index | Purpose |
+| --- | --- |
+| `students_createdAt_id_idx` on `("createdAt" DESC, "id" ASC)` | Supports the default newest-first pagination order with a stable tie-breaker. |
+| `students_firstName_trgm_idx` (GIN) | Accelerates partial, case-insensitive first-name search. |
+| `students_lastName_trgm_idx` (GIN) | Accelerates partial, case-insensitive last-name search. |
+| `students_email_trgm_idx` (GIN) | Accelerates partial, case-insensitive email search. |
+
+The existing unique indexes on `students.email`, `students.documentNumber`, and `users.email` are kept for uniqueness and exact lookups. The e2e suite verifies these indexes and the extension through `test/database-indexes.e2e-spec.ts`.
+
+`CREATE EXTENSION` requires the database user to be allowed to install extensions. On managed PostgreSQL services, enable `pg_trgm` from the provider console before deploying the migration if the application user cannot create it.
+
+### Query and pagination optimizations
+
+- The student list no longer wraps the count and page query in a read-only transaction. A partial page already reveals the exact total, so `COUNT` is only executed when the page is full or when an empty page is requested after the first one. This removes one query and the transaction overhead for common filtered and last-page requests.
+- The page query keeps a deterministic `createdAt` descending order with `id` as a tie-breaker, now backed by a matching composite index.
+- Authentication and student creation select only the columns they need, avoiding unnecessary data transfer.
+- The JWT and roles guards are registered once in `AuthModule` and shared with feature modules instead of creating duplicate provider instances.
+
+### Local response-time measurements
+
+Measured with 100,000 students in PostgreSQL 18, warm cache. Values are indicative and depend on hardware and data distribution.
+
+| Query | Before indexes | With indexes |
+| --- | --- | --- |
+| Partial first-name search, first page | ~68 ms (sequential scan) | ~11 ms (GIN trigram index) |
+| First page ordered by `createdAt DESC, id` | ~25 ms (parallel scan + sort) | ~0.1 ms (index scan) |
+| Deep page (`OFFSET 90000`) | ~65 ms (external sort) | ~23 ms (index scan) |
+
+Deep offset pagination still scales with the offset. Clients should prefer small page numbers; the `limit` is capped at 100 by validation.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
