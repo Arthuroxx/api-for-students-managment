@@ -10,6 +10,7 @@ export function setupSwagger(app: INestApplication): void {
     .setVersion('1.0')
     .addTag('Auth')
     .addTag('Students')
+    .addTag('Health')
     .addBearerAuth({
       type: 'http',
       scheme: 'bearer',
