@@ -13,7 +13,8 @@ import { RolesGuard } from './guards/roles.guard.js';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => [
         {
-          name: 'login',
+          // Unnamed (default) throttler so responses expose the standard
+          // `X-RateLimit-*` and `Retry-After` headers.
           ttl: configService.getOrThrow<number>('AUTH_LOGIN_RATE_TTL_MS'),
           limit: configService.getOrThrow<number>('AUTH_LOGIN_RATE_LIMIT'),
         },
