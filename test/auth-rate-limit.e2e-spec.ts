@@ -42,7 +42,7 @@ describe('Login rate limiting (e2e)', () => {
         .send({})
         .expect(400);
 
-      expect(response.headers['x-ratelimit-limit-login']).toBe(
+      expect(response.headers['x-ratelimit-limit']).toBe(
         String(loginRateLimit),
       );
     }
@@ -50,6 +50,7 @@ describe('Login rate limiting (e2e)', () => {
     const blocked = await request(server).post('/auth/login').send({});
 
     expect(blocked.status).toBe(429);
+    expect(blocked.headers['retry-after']).toBeDefined();
     expect(blocked.body).toMatchObject({
       statusCode: 429,
       message: 'ThrottlerException: Too Many Requests',
