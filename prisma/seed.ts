@@ -1,8 +1,7 @@
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { hashPassword } from '../src/auth/password.js';
 import { PrismaClient } from '../src/generated/prisma/client.js';
-import { UserRole } from '../src/generated/prisma/enums.js';
+import { ensureAdminUser } from '../src/prisma/seed-admin.js';
 
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
@@ -24,15 +23,10 @@ async function main(): Promise<void> {
   });
 
   try {
-    const passwordHash = await hashPassword(password);
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: { passwordHash, role: UserRole.ADMIN },
-      create: { email, passwordHash, role: UserRole.ADMIN },
-      select: { id: true, email: true, role: true },
-    });
+    const user = await ensureAdminUser(prisma.user, email, password);
+    const action = user.created ? 'Created' : 'Kept';
 
-    console.log(`Seeded ${user.role} user ${user.email} (${user.id})`);
+    console.log(`${action} ${user.role} user ${user.email} (${user.id})`);
   } finally {
     await prisma.$disconnect();
   }

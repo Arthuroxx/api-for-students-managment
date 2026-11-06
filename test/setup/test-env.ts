@@ -51,4 +51,8 @@ export const testEnv: Record<string, string> = {
   DATABASE_URL: testDatabaseUrl,
   JWT_SECRET: testJwtSecret,
   JWT_EXPIRES_IN_SECONDS: process.env.JWT_EXPIRES_IN_SECONDS ?? '3600',
+  // Most e2e files log in several times; the dedicated rate-limit spec lowers
+  // this value before the application module is loaded.
+  AUTH_LOGIN_RATE_LIMIT: '1000',
+  AUTH_LOGIN_RATE_TTL_MS: '60000',
 };

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuthenticatedUser, JwtPayload } from '../auth.types.js';
 import { isUserRole } from '../user-role.js';
 
@@ -13,7 +14,10 @@ type RequestWithUser = Request & { user?: AuthenticatedUser };
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithUser>();
@@ -23,6 +27,28 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired token');
     }
 
+    const payload = await this.verifyToken(token);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, email: true, role: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    // The database is the source of truth for the role. A token issued before
+    // a role change cannot keep permissions the user no longer has.
+    request.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    };
+    return true;
+  }
+
+  private async verifyToken(token: string): Promise<JwtPayload> {
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
 
@@ -34,12 +60,7 @@ export class JwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('Invalid or expired token');
       }
 
-      request.user = {
-        id: payload.sub,
-        email: payload.email,
-        role: payload.role,
-      };
-      return true;
+      return payload;
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }

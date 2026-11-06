@@ -1,6 +1,7 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '../../generated/prisma/enums.js';
+import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuthenticatedUser } from '../auth.types.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 
@@ -29,12 +30,24 @@ describe('JwtAuthGuard', () => {
     secret,
     signOptions: { expiresIn: 3600 },
   });
-  const guard = new JwtAuthGuard(jwtService);
+  const findUnique = vi.fn();
+  const prisma = { user: { findUnique } } as unknown as PrismaService;
+  const guard = new JwtAuthGuard(jwtService, prisma);
+
+  beforeEach(() => {
+    findUnique.mockReset();
+    findUnique.mockResolvedValue({
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+    });
+  });
 
   it('rejects requests without an authorization header', async () => {
     await expect(
       guard.canActivate(createContext({ headers: {} })),
     ).rejects.toThrow(UnauthorizedException);
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it('rejects requests with a non-Bearer scheme', async () => {
@@ -53,6 +66,7 @@ describe('JwtAuthGuard', () => {
         createContext({ headers: { authorization: 'Bearer invalid-token' } }),
       ),
     ).rejects.toThrow(UnauthorizedException);
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it('rejects expired tokens', async () => {
@@ -85,17 +99,47 @@ describe('JwtAuthGuard', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
-  it('attaches the authenticated user with role to the request', async () => {
+  it('rejects tokens whose user no longer exists', async () => {
+    findUnique.mockResolvedValue(null);
+    const token = jwtService.sign(payload);
+
+    await expect(
+      guard.canActivate(
+        createContext({ headers: { authorization: `Bearer ${token}` } }),
+      ),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('attaches the authenticated user loaded from the database', async () => {
     const token = jwtService.sign(payload);
     const request: MockRequest = {
       headers: { authorization: `Bearer ${token}` },
     };
 
     await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { id: payload.sub },
+      select: { id: true, email: true, role: true },
+    });
     expect(request.user).toEqual({
       id: payload.sub,
       email: payload.email,
       role: payload.role,
     });
+  });
+
+  it('uses the current database role instead of the token role', async () => {
+    findUnique.mockResolvedValue({
+      id: payload.sub,
+      email: payload.email,
+      role: UserRole.USER,
+    });
+    const token = jwtService.sign(payload);
+    const request: MockRequest = {
+      headers: { authorization: `Bearer ${token}` },
+    };
+
+    await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
+    expect(request.user?.role).toBe(UserRole.USER);
   });
 });

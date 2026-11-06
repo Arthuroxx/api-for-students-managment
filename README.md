@@ -42,8 +42,8 @@ The API exposes a small, well-defined student management domain:
 
 ```bash
 cp .env.example .env
-# Edit .env: set POSTGRES_PASSWORD, a matching DATABASE_URL, JWT_SECRET,
-# SEED_USER_EMAIL and SEED_USER_PASSWORD.
+# Edit .env: set POSTGRES_PASSWORD, JWT_SECRET, SEED_USER_EMAIL and
+# SEED_USER_PASSWORD. POSTGRES_PASSWORD may contain reserved URL characters.
 docker compose up --build -d
 docker compose --profile seed run --rm seed
 curl http://localhost:3000/health
@@ -93,8 +93,8 @@ AllExceptionsFilter (only when an exception is thrown)
 ```
 
 - Global validation rejects unknown fields and transforms query strings into typed DTO values.
-- `JwtAuthGuard` validates the `Authorization: Bearer <token>` header on student routes.
-- `RolesGuard` checks the role required by `@Roles(...)`.
+- `JwtAuthGuard` validates the `Authorization: Bearer <token>` header and loads the current user from the database on every request. Deleted users get `401`, and the database role overrides the role stored in the token.
+- `RolesGuard` checks the role required by `@Roles(...)` using the current database role.
 - `StudentsService` contains the business logic and maps Prisma errors to HTTP exceptions.
 - `AllExceptionsFilter` returns consistent error bodies and logs sanitized error metadata.
 - `RequestLoggingMiddleware` logs method, path, status code and duration for every request.
@@ -105,7 +105,7 @@ AllExceptionsFilter (only when an exception is thrown)
 | --- | --- |
 | `AppModule` | Root module, global configuration, middleware registration and optional NestJS Observe instrumentation. |
 | `PrismaModule` | Creates the shared Prisma client using the PostgreSQL driver adapter and manages connect/disconnect lifecycle hooks. |
-| `AuthModule` | Login endpoint, JWT signing, password verification and shared JWT/roles guards. |
+| `AuthModule` | Login endpoint, login rate limiting, JWT signing, password verification and shared JWT/roles guards. |
 | `StudentsModule` | Protected student CRUD, filters, pagination and database error mapping. |
 | `HealthModule` | Public health endpoint that executes `SELECT 1` against PostgreSQL. |
 | `common` | Global exception filter, request logging middleware and shared error DTO. |
@@ -118,7 +118,7 @@ AllExceptionsFilter (only when an exception is thrown)
 ├── prisma/
 │   ├── migrations/              # Versioned SQL migrations
 │   ├── schema.prisma            # Student and User models
-│   └── seed.ts                  # Idempotent ADMIN user seed
+│   └── seed.ts                  # Creates the initial ADMIN user when absent
 ├── src/
 │   ├── auth/                    # Login, JWT, guards, roles, password hashing
 │   ├── common/                  # Exception filter, logging middleware, shared DTOs
@@ -185,8 +185,8 @@ Copy-Item .env.example .env
 
 Open `.env` and set at least:
 
-- `POSTGRES_PASSWORD` — the password for the local PostgreSQL container.
-- `DATABASE_URL` — update it to match the same user, password, host, port and database.
+- `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` — credentials and database created by the PostgreSQL container.
+- `DATABASE_URL` — connection string used when running the API on the host. Update it to match the same user, password, host, port and database. If the password contains reserved URL characters, percent-encode it here; Compose does this automatically.
 - `JWT_SECRET` — a random value with at least 32 characters.
 
 Generate a suitable JWT secret with Node.js:
@@ -220,17 +220,19 @@ All variables are loaded from `.env` when running the API on the host. Docker Co
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `POSTGRES_USER` | Docker Compose | — | PostgreSQL user created by the container. |
-| `POSTGRES_PASSWORD` | Docker Compose | — | PostgreSQL password. Use a URL-safe password or URL-encode it in `DATABASE_URL`. |
+| `POSTGRES_PASSWORD` | Docker Compose | — | PostgreSQL password. Any character is supported, including `@`, `:`, `/`, `#` and `%`. |
 | `POSTGRES_DB` | Docker Compose | — | Database created by the PostgreSQL container. |
 | `POSTGRES_PORT` | No | `5432` | Host port mapped to PostgreSQL. Change it if `5432` is already in use. |
-| `DATABASE_URL` | Yes | — | PostgreSQL connection string used by the API, Prisma CLI and seed. For local runs use `localhost`; Compose supplies its own internal URL. |
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string used by the API, Prisma CLI and seed. For local runs use `localhost`; Compose builds its own internal URL from `POSTGRES_*`. |
 | `TEST_DATABASE_URL` | No | `DATABASE_URL` with `_test` appended | Isolated database used by the e2e suite. Its name must be `test` or end with `_test`. |
 | `NODE_ENV` | No | `development` | One of `development`, `production` or `test`. |
 | `PORT` | No | `3000` | HTTP port used by the API and by the Compose port mapping. |
 | `CORS_ORIGINS` | No | empty | Comma-separated allowed origins. Empty disables CORS. Example: `http://localhost:5173,https://app.example.com`. |
 | `JWT_SECRET` | Yes | — | Secret used to sign and verify JWTs. Minimum 32 characters. |
 | `JWT_EXPIRES_IN_SECONDS` | No | `3600` | Access token lifetime in seconds, between `60` and `604800`. |
-| `SEED_USER_EMAIL` | Seed only | — | Email of the initial `ADMIN` user created by `npm run db:seed`. |
+| `AUTH_LOGIN_RATE_LIMIT` | No | `10` | Maximum `POST /auth/login` attempts per client IP inside the rate-limit window. |
+| `AUTH_LOGIN_RATE_TTL_MS` | No | `60000` | Login rate-limit window in milliseconds (minimum `1000`). |
+| `SEED_USER_EMAIL` | Seed only | — | Email of the initial `ADMIN` user created by `npm run db:seed` when it does not exist. |
 | `SEED_USER_PASSWORD` | Seed only | — | Password of the initial `ADMIN` user. |
 | `OBSERVE_APP_KEY` | No | placeholder | NestJS Observe application key. Leave unset to keep Observe disabled. |
 | `OBSERVE_APP_SECRET` | No | placeholder | NestJS Observe application secret. |
@@ -249,16 +251,26 @@ Notable constraints:
 - `JWT_SECRET` must contain at least 32 characters.
 - `PORT` must be an integer between `1` and `65535`.
 - `JWT_EXPIRES_IN_SECONDS` must be an integer between `60` and `604800`.
+- `AUTH_LOGIN_RATE_LIMIT` must be a positive integer.
+- `AUTH_LOGIN_RATE_TTL_MS` must be an integer of at least `1000`.
 
 ### Docker-specific URL
 
-Compose constructs the API container's database URL as:
+The image entrypoint builds the container's `DATABASE_URL` at startup from the
+raw `POSTGRES_*` values:
 
 ```text
-postgresql://<POSTGRES_USER>:<POSTGRES_PASSWORD>@postgres:5432/<POSTGRES_DB>?schema=public
+postgresql://<encoded POSTGRES_USER>:<encoded POSTGRES_PASSWORD>@postgres:5432/<encoded POSTGRES_DB>?schema=public
 ```
 
-The hostname `postgres` is the Compose service name. The host `DATABASE_URL` remains pointed at `localhost` for local (`npm run start:dev`) execution.
+The user name, password and database name are percent-encoded, so a password
+such as `p@ss:word/with#chars%&?` connects correctly without manual escaping.
+`DATABASE_HOST`, `DATABASE_PORT` and `DATABASE_SCHEMA` can override the
+defaults (`postgres`, `5432` and `public`). Setting `DATABASE_URL` explicitly
+also works and takes precedence when running the image directly.
+
+The hostname `postgres` is the Compose service name. The host `DATABASE_URL`
+remains pointed at `localhost` for local (`npm run start:dev`) execution.
 
 ## Running locally
 
@@ -331,7 +343,7 @@ npm run start:prod
 | `npm run test:e2e` | Run end-to-end and integration tests. |
 | `npm run test:integration` | Run only `test/integration.e2e-spec.ts`. |
 | `npm run test:cov` | Run unit tests with coverage. |
-| `npm run db:seed` | Create or update the initial ADMIN user. |
+| `npm run db:seed` | Create the initial ADMIN user when it does not exist. |
 
 ## Running with Docker Compose
 
@@ -347,7 +359,7 @@ The command:
 
 1. Builds the multi-stage API image.
 2. Starts PostgreSQL and waits for its health check.
-3. Runs the one-shot `migrate` service (`npx prisma migrate deploy`).
+3. Runs the one-shot `migrate` service. Its entrypoint builds an encoded `DATABASE_URL` from `POSTGRES_*` and runs `npx prisma migrate deploy`.
 4. Starts the API only after the migration service exits successfully.
 5. Waits for the API health check to report healthy.
 
@@ -375,7 +387,7 @@ The API is available at `http://localhost:3000`, Swagger at `http://localhost:30
 docker compose --profile seed run --rm seed
 ```
 
-The seed service uses `SEED_USER_EMAIL` and `SEED_USER_PASSWORD` from `.env`.
+The seed service uses `SEED_USER_EMAIL` and `SEED_USER_PASSWORD` from `.env`. It creates the `ADMIN` user only when the email does not exist yet; an existing user keeps its current role and password, so re-running the seed is safe.
 
 ### Useful Docker commands
 
@@ -475,7 +487,7 @@ npx prisma generate
 # Reset the database and reapply all migrations (destructive)
 npx prisma migrate reset
 
-# Create or update the seeded ADMIN user
+# Create the seeded ADMIN user when it does not exist
 npm run db:seed
 ```
 
@@ -542,6 +554,13 @@ The JWT payload contains:
 
 Tokens are signed with `JWT_SECRET` and expire after `JWT_EXPIRES_IN_SECONDS`.
 
+Login is rate limited per client IP. By default the API allows `10` attempts
+per `60` seconds; further attempts return `429 Too Many Requests` with a
+`Retry-After` header. Configure the window with `AUTH_LOGIN_RATE_LIMIT` and
+`AUTH_LOGIN_RATE_TTL_MS`. The default storage is in-memory per application
+instance; deployments with several replicas should provide a shared
+`ThrottlerStorage`.
+
 ### Sending the token
 
 Student endpoints require:
@@ -551,6 +570,10 @@ Authorization: Bearer <accessToken>
 ```
 
 Missing, malformed, invalid or expired tokens return `401 Unauthorized` with the message `Invalid or expired token`.
+
+On every authenticated request the guard loads the user from the database. A
+token for a deleted user is rejected with `401`, and the role stored in the
+database is used instead of the role embedded in the token.
 
 ### Roles
 
@@ -563,7 +586,7 @@ Role checks are enforced by `RolesGuard` through the `@Roles(...)` decorator. A 
 
 ### User provisioning
 
-The project does not expose a public registration endpoint. `npm run db:seed` creates or updates the initial `ADMIN` user from `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`. Additional users and roles must be provisioned directly in the database until an administration API is added.
+The project does not expose a public registration endpoint. `npm run db:seed` creates the initial `ADMIN` user from `SEED_USER_EMAIL` and `SEED_USER_PASSWORD` only when that email is not present. Existing users are never modified: re-running the seed does not change their role or password. Additional users and roles must be provisioned directly in the database until an administration API is added.
 
 ## API reference
 
@@ -662,6 +685,7 @@ Errors:
 
 - `400 Bad Request` for an invalid email, a missing password, a password longer than 128 characters or unknown fields.
 - `401 Unauthorized` with `Invalid email or password` for unknown users or wrong passwords.
+- `429 Too Many Requests` after `AUTH_LOGIN_RATE_LIMIT` attempts from the same client IP inside the `AUTH_LOGIN_RATE_TTL_MS` window.
 
 ### `GET /students`
 
@@ -815,7 +839,7 @@ Duplicate examples:
 
 ### `PATCH /students/:id`
 
-Partially updates a student. Requires `ADMIN`. Only the provided fields are changed; omitting all fields returns the current record.
+Partially updates a student. Requires `ADMIN`. Only the provided fields are changed; omitting all fields returns the current record. A field explicitly set to `null` is rejected instead of clearing the column.
 
 ```bash
 curl -X PATCH http://localhost:3000/students/e6d9f2c1-8b34-4f8f-9c94-5c1f0f2b7a11 \
@@ -831,7 +855,7 @@ curl -X PATCH http://localhost:3000/students/e6d9f2c1-8b34-4f8f-9c94-5c1f0f2b7a1
 
 Errors:
 
-- `400 Bad Request` for an invalid UUID, invalid fields or unknown properties.
+- `400 Bad Request` for an invalid UUID, invalid fields, `null` values or unknown properties.
 - `401 Unauthorized` for a missing or invalid token.
 - `403 Forbidden` when the role is not `ADMIN`.
 - `404 Not Found` when the student does not exist.
@@ -1034,7 +1058,7 @@ Alternatively set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment.
 npm test
 ```
 
-Unit tests cover the application controller, authentication service, guards, environment validation, exception filter, request logging middleware and student service pagination logic.
+Unit tests cover the application controller, authentication service, guards, environment validation, exception filter, request logging middleware, student service pagination logic, login URL encoding and seed safety.
 
 ### End-to-end tests
 
@@ -1048,10 +1072,11 @@ npm run test:e2e
 The suite covers:
 
 - Public root and health endpoints.
-- Login, invalid credentials and JWT validation.
+- Login, invalid credentials, JWT validation and login rate limiting.
+- Deleted users and role changes reflected by the JWT guard.
 - Role-based access for `ADMIN` and `USER`.
 - Student create, read, update and delete.
-- Pagination, filters and validation.
+- Pagination, filters and validation, including rejection of `null` patch values.
 - Duplicate conflicts and missing students.
 - Structured logging without sensitive data.
 - Database indexes and the `pg_trgm` extension.
@@ -1149,9 +1174,12 @@ docker compose down -v
 docker compose up --build -d
 ```
 
-### Duplicate key error when seeding
+### Seed does not change an existing user
 
-The seed uses `upsert` by email, so running it repeatedly is safe. If another user already owns the same email, change `SEED_USER_EMAIL` or remove the conflicting record.
+The seed looks up `SEED_USER_EMAIL` first and only creates the `ADMIN` user when
+the email is absent. It never updates an existing user's role or password. To
+rotate those values, update the user explicitly in the database; running the
+seed repeatedly is safe.
 
 ### `pg_trgm` permission denied
 
