@@ -559,7 +559,8 @@ per `60` seconds; further attempts return `429 Too Many Requests` with a
 `Retry-After` header. Configure the window with `AUTH_LOGIN_RATE_LIMIT` and
 `AUTH_LOGIN_RATE_TTL_MS`. The default storage is in-memory per application
 instance; deployments with several replicas should provide a shared
-`ThrottlerStorage`.
+`ThrottlerStorage`. The client IP is the direct socket address, so behind a
+reverse proxy configure Express `trust proxy` for the trusted hops.
 
 ### Sending the token
 
