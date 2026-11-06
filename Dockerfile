@@ -11,6 +11,13 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates openssl \
   && rm -rf /var/lib/apt/lists/*
 
+# Build DATABASE_URL from POSTGRES_* at container start (see docker/entrypoint.sh).
+COPY docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+  && chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
 # Install all dependencies, including the Nest CLI and Prisma CLI.
 # Prisma generation needs the schema and config, so copy them before npm ci.
 FROM base AS deps

@@ -48,7 +48,10 @@ describe('Students pagination and filters (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
-    authRequest = createAuthenticatedRequest(app, createTestAccessToken(app));
+    authRequest = createAuthenticatedRequest(
+      app,
+      await createTestAccessToken(app),
+    );
 
     for (let index = 0; index < 12; index += 1) {
       const student = await prisma.student.create({
