@@ -40,7 +40,10 @@ describe('Students read (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
-    authRequest = createAuthenticatedRequest(app, createTestAccessToken(app));
+    authRequest = createAuthenticatedRequest(
+      app,
+      await createTestAccessToken(app),
+    );
 
     const first = await prisma.student.create({
       data: {

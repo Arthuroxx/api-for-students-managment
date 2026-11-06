@@ -35,7 +35,10 @@ describe('Students update (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
-    authRequest = createAuthenticatedRequest(app, createTestAccessToken(app));
+    authRequest = createAuthenticatedRequest(
+      app,
+      await createTestAccessToken(app),
+    );
 
     const target = await prisma.student.create({
       data: {
@@ -160,6 +163,49 @@ describe('Students update (e2e)', () => {
       .patch(`/students/${targetId}`)
       .send({ firstName: '' })
       .expect(400);
+  });
+
+  it('PATCH /students/:id rejects null values instead of clearing fields', async () => {
+    const before = await prisma.student.findUniqueOrThrow({
+      where: { id: targetId },
+    });
+
+    for (const field of [
+      'firstName',
+      'lastName',
+      'email',
+      'documentNumber',
+      'birthDate',
+    ]) {
+      const response = await authRequest
+        .patch(`/students/${targetId}`)
+        .send({ [field]: null })
+        .expect(400);
+
+      expect(response.body.message).toEqual(
+        expect.arrayContaining([expect.stringContaining(field)]),
+      );
+    }
+
+    // A null field must reject the whole request: valid fields in the same
+    // body are not persisted.
+    await authRequest
+      .patch(`/students/${targetId}`)
+      .send({ firstName: 'ShouldNotPersist', birthDate: null })
+      .expect(400);
+
+    const after = await prisma.student.findUniqueOrThrow({
+      where: { id: targetId },
+    });
+
+    expect(after).toMatchObject({
+      firstName: before.firstName,
+      lastName: before.lastName,
+      email: before.email,
+      documentNumber: before.documentNumber,
+    });
+    expect(after.birthDate.toISOString()).toBe(before.birthDate.toISOString());
+    expect(after.birthDate.toISOString()).not.toBe('1970-01-01T00:00:00.000Z');
   });
 
   it('PATCH /students/:id rejects internal fields', async () => {

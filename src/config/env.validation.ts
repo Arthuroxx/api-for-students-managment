@@ -11,6 +11,10 @@ import {
   MinLength,
   validateSync,
 } from 'class-validator';
+import {
+  DEFAULT_LOGIN_RATE_LIMIT,
+  DEFAULT_LOGIN_RATE_TTL_MS,
+} from '../auth/login-throttle.constants.js';
 
 export enum NodeEnvironment {
   Development = 'development',
@@ -48,6 +52,16 @@ export class EnvironmentVariables {
   @Min(60)
   @Max(604800)
   JWT_EXPIRES_IN_SECONDS: number = 3600;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  AUTH_LOGIN_RATE_LIMIT: number = DEFAULT_LOGIN_RATE_LIMIT;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1000)
+  AUTH_LOGIN_RATE_TTL_MS: number = DEFAULT_LOGIN_RATE_TTL_MS;
 }
 
 export function validateEnv(

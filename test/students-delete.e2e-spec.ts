@@ -28,7 +28,10 @@ describe('Students delete (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
-    authRequest = createAuthenticatedRequest(app, createTestAccessToken(app));
+    authRequest = createAuthenticatedRequest(
+      app,
+      await createTestAccessToken(app),
+    );
 
     const target = await prisma.student.create({
       data: {

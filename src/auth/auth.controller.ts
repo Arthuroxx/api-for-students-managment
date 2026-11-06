@@ -1,11 +1,20 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { ErrorResponseDto } from '../common/dto/error-response.dto.js';
 import { AuthService } from './auth.service.js';
 import { LoginResult } from './auth.types.js';
@@ -19,6 +28,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({
     summary: 'Log in with credentials',
     description:
@@ -34,6 +44,10 @@ export class AuthController {
   })
   @ApiUnauthorizedResponse({
     description: 'Invalid email or password',
+    type: ErrorResponseDto,
+  })
+  @ApiTooManyRequestsResponse({
+    description: 'Too many login attempts from the same client',
     type: ErrorResponseDto,
   })
   login(@Body() loginDto: LoginDto): Promise<LoginResult> {
