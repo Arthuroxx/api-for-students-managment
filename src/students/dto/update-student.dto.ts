@@ -1,4 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+﻿import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsEmail,
@@ -7,6 +8,19 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
+import { IsNotFutureDate } from '../validators/is-not-future-date.validator.js';
+
+function trimString(value: unknown): unknown {
+  return typeof value === 'string' ? value.trim() : value;
+}
+
+function normalizeEmail(value: unknown): unknown {
+  return typeof value === 'string' ? value.trim().toLowerCase() : value;
+}
+
+function normalizeDocumentNumber(value: unknown): unknown {
+  return typeof value === 'string' ? value.trim().toUpperCase() : value;
+}
 
 /**
  * Only validate the property when it is present in the request body.
@@ -26,6 +40,7 @@ export class UpdateStudentDto {
     maxLength: 100,
   })
   @ValidateIf(isProvided)
+  @Transform(({ value }) => trimString(value))
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
@@ -37,38 +52,44 @@ export class UpdateStudentDto {
     maxLength: 100,
   })
   @ValidateIf(isProvided)
+  @Transform(({ value }) => trimString(value))
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   lastName?: string;
 
   @ApiPropertyOptional({
-    description: 'Unique student email address',
+    description:
+      'Unique student email address (normalized: trimmed and lowercased)',
     example: 'ana.lopez@example.com',
     maxLength: 255,
   })
   @ValidateIf(isProvided)
+  @Transform(({ value }) => normalizeEmail(value))
   @IsEmail()
   @MaxLength(255)
   email?: string;
 
   @ApiPropertyOptional({
-    description: 'Unique student document number',
+    description:
+      'Unique student document number (normalized: trimmed and uppercased)',
     example: 'DOC-123456',
     maxLength: 50,
   })
   @ValidateIf(isProvided)
+  @Transform(({ value }) => normalizeDocumentNumber(value))
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)
   documentNumber?: string;
 
   @ApiPropertyOptional({
-    description: 'Birth date in ISO 8601 date format',
+    description: 'Birth date in ISO 8601 date format (must not be in the future)',
     example: '2000-05-10',
     format: 'date',
   })
   @ValidateIf(isProvided)
   @IsDateString({ strict: true })
+  @IsNotFutureDate()
   birthDate?: string;
 }

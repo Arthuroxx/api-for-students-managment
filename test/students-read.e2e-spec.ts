@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+﻿import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
 import { App } from 'supertest/types.js';
@@ -50,7 +50,7 @@ describe('Students read (e2e)', () => {
         firstName: 'Read',
         lastName: 'One',
         email: `${runTag}-one@example.com`,
-        documentNumber: `${runTag}-1`,
+        documentNumber: `${runTag}-1`.toUpperCase(),
         birthDate: new Date('2000-01-01'),
       },
     });
@@ -59,7 +59,7 @@ describe('Students read (e2e)', () => {
         firstName: 'Read',
         lastName: 'Two',
         email: `${runTag}-two@example.com`,
-        documentNumber: `${runTag}-2`,
+        documentNumber: `${runTag}-2`.toUpperCase(),
         birthDate: new Date('2001-02-02'),
       },
     });
@@ -117,7 +117,7 @@ describe('Students read (e2e)', () => {
       firstName: 'Read',
       lastName: 'One',
       email: `${runTag}-one@example.com`,
-      documentNumber: `${runTag}-1`,
+      documentNumber: `${runTag}-1`.toUpperCase(),
       birthDate: '2000-01-01T00:00:00.000Z',
     });
     expect(Object.keys(response.body).sort()).toEqual(PUBLIC_FIELDS);

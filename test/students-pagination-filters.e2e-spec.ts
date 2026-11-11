@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+﻿import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
@@ -12,6 +12,7 @@ import {
   DEFAULT_LIMIT,
   DEFAULT_PAGE,
   MAX_LIMIT,
+  MAX_PAGE,
 } from './../src/students/dto/list-students-query.dto.js';
 
 interface StudentItem {
@@ -59,13 +60,33 @@ describe('Students pagination and filters (e2e)', () => {
           firstName: `${runTag}-Student-${index}`,
           lastName: index % 2 === 0 ? 'AlphaGroup' : 'BetaGroup',
           email: `${runTag}.${index}@example.com`,
-          documentNumber: `${runTag}-${index}`,
+          documentNumber: `${runTag}-${index}`.toUpperCase(),
           birthDate: new Date('2000-01-01'),
         },
       });
 
       createdIds.push(student.id);
     }
+
+    const literalPercent = await prisma.student.create({
+      data: {
+        firstName: `${runTag}-Percent%Name`,
+        lastName: `Last%Name`,
+        email: `${runTag}.percent%user@example.com`,
+        documentNumber: `${runTag}-PCT`.toUpperCase(),
+        birthDate: new Date('2000-01-01'),
+      },
+    });
+    const literalUnderscore = await prisma.student.create({
+      data: {
+        firstName: `${runTag}-Under_Name`,
+        lastName: `Last_Name`,
+        email: `${runTag}.under_user@example.com`,
+        documentNumber: `${runTag}-USR`.toUpperCase(),
+        birthDate: new Date('2000-01-01'),
+      },
+    });
+    createdIds.push(literalPercent.id, literalUnderscore.id);
   });
 
   afterAll(async () => {
@@ -118,11 +139,12 @@ describe('Students pagination and filters (e2e)', () => {
 
     expect(first.data).toHaveLength(5);
     expect(second.data).toHaveLength(5);
-    expect(third.data).toHaveLength(2);
+    expect(third.data).toHaveLength(4);
 
-    for (const page of [first, second, third]) {
-      expect(page.meta).toMatchObject({ total: 12, limit: 5, totalPages: 3 });
+    for (const page of [first, second]) {
+      expect(page.meta).toMatchObject({ total: 14, limit: 5, totalPages: 3 });
     }
+    expect(third.meta).toMatchObject({ total: 14, limit: 5, totalPages: 3 });
     expect(first.meta.page).toBe(1);
     expect(second.meta.page).toBe(2);
     expect(third.meta.page).toBe(3);
@@ -132,7 +154,7 @@ describe('Students pagination and filters (e2e)', () => {
       ...second.data.map((student) => student.id),
       ...third.data.map((student) => student.id),
     ]);
-    expect(ids.size).toBe(12);
+    expect(ids.size).toBe(14);
   });
 
   it('filters by lastName partially and ignoring case', async () => {
@@ -160,8 +182,60 @@ describe('Students pagination and filters (e2e)', () => {
       .query({ firstName: runTag, email: '.1' })
       .expect(200);
 
-    expect((caseInsensitive.body as StudentsPageBody).meta.total).toBe(12);
+    expect((caseInsensitive.body as StudentsPageBody).meta.total).toBe(14);
     expect((partial.body as StudentsPageBody).meta.total).toBe(3);
+  });
+
+  it('treats % and _ as literal characters in filters', async () => {
+    const percentFirstName = await authRequest
+      .get('/students')
+      .query({ firstName: `${runTag}-Percent%` })
+      .expect(200);
+    expect((percentFirstName.body as StudentsPageBody).meta.total).toBe(1);
+    expect(
+      (percentFirstName.body as StudentsPageBody).data[0]?.firstName,
+    ).toContain('%');
+
+    const underscoreFirstName = await authRequest
+      .get('/students')
+      .query({ firstName: `${runTag}-Under_` })
+      .expect(200);
+    expect((underscoreFirstName.body as StudentsPageBody).meta.total).toBe(1);
+    expect(
+      (underscoreFirstName.body as StudentsPageBody).data[0]?.firstName,
+    ).toContain('_');
+
+    const percentLastName = await authRequest
+      .get('/students')
+      .query({ lastName: 'Last%Name' })
+      .expect(200);
+    expect(
+      (percentLastName.body as StudentsPageBody).data.some(
+        (student) => student.lastName === 'Last%Name',
+      ),
+    ).toBe(true);
+
+    const underscoreLastName = await authRequest
+      .get('/students')
+      .query({ lastName: 'Last_Name' })
+      .expect(200);
+    expect(
+      (underscoreLastName.body as StudentsPageBody).data.some(
+        (student) => student.lastName === 'Last_Name',
+      ),
+    ).toBe(true);
+
+    const percentEmail = await authRequest
+      .get('/students')
+      .query({ email: 'percent%user' })
+      .expect(200);
+    expect((percentEmail.body as StudentsPageBody).meta.total).toBe(1);
+
+    const underscoreEmail = await authRequest
+      .get('/students')
+      .query({ email: 'under_user' })
+      .expect(200);
+    expect((underscoreEmail.body as StudentsPageBody).meta.total).toBe(1);
   });
 
   it('returns an empty page when no student matches the filters', async () => {
@@ -195,19 +269,37 @@ describe('Students pagination and filters (e2e)', () => {
       .get('/students')
       .query({ page: 'not-a-number' })
       .expect(400);
+
+    await authRequest
+      .get('/students')
+      .query({ page: MAX_PAGE + 1 })
+      .expect(400);
   });
 
-  it('accepts the maximum allowed limit', async () => {
-    const response = await authRequest
+  it('accepts maximum allowed page and limit boundaries', async () => {
+    const maxLimitResponse = await authRequest
       .get('/students')
       .query({ firstName: runTag, limit: MAX_LIMIT })
       .expect(200);
 
-    expect((response.body as StudentsPageBody).meta).toEqual({
-      total: 12,
+    expect((maxLimitResponse.body as StudentsPageBody).meta).toEqual({
+      total: 14,
       page: DEFAULT_PAGE,
       limit: MAX_LIMIT,
       totalPages: 1,
     });
+
+    const maxPageResponse = await authRequest
+      .get('/students')
+      .query({ firstName: runTag, page: MAX_PAGE, limit: MAX_LIMIT })
+      .expect(200);
+
+    expect((maxPageResponse.body as StudentsPageBody).meta).toMatchObject({
+      page: MAX_PAGE,
+      limit: MAX_LIMIT,
+      total: 0,
+      totalPages: 0,
+    });
+    expect((maxPageResponse.body as StudentsPageBody).data).toEqual([]);
   });
 });
