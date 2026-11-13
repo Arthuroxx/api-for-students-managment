@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+﻿import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
@@ -73,7 +73,7 @@ describe('Role-based access control (e2e)', () => {
         firstName: 'RbacReadable',
         lastName: 'Student',
         email: fixtureEmail,
-        documentNumber: `${runTag}-fixture`,
+        documentNumber: `${runTag}-fixture`.toUpperCase(),
         birthDate: new Date('2000-01-01'),
       },
     });
@@ -111,7 +111,7 @@ describe('Role-based access control (e2e)', () => {
         firstName: 'RbacAdminCreated',
         lastName: 'Student',
         email: `${runTag}-created@example.com`,
-        documentNumber: `${runTag}-created`,
+        documentNumber: `${runTag}-created`.toUpperCase(),
         birthDate: '2001-02-03',
       })
       .expect(201);
@@ -174,7 +174,7 @@ describe('Role-based access control (e2e)', () => {
         firstName: 'RbacForbidden',
         lastName: 'Student',
         email: forbiddenEmail,
-        documentNumber: `${runTag}-forbidden`,
+        documentNumber: `${runTag}-forbidden`.toUpperCase(),
         birthDate: '2002-03-04',
       })
       .expect(403);

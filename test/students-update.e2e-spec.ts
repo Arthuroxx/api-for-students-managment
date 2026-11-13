@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+﻿import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
 import { App } from 'supertest/types.js';
@@ -19,11 +19,13 @@ describe('Students update (e2e)', () => {
     firstName: 'Original',
     lastName: 'Student',
     email: `${runTag}-target@example.com`,
-    documentNumber: `${runTag}-target`,
+    documentNumber: `${runTag}-target`.toUpperCase(),
     birthDate: '2000-01-01',
   };
   let targetId: string;
   let otherId: string;
+  let otherEmail: string;
+  let otherDocumentNumber: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -40,6 +42,9 @@ describe('Students update (e2e)', () => {
       await createTestAccessToken(app),
     );
 
+    otherEmail = `${runTag}-other@example.com`;
+    otherDocumentNumber = `${runTag}-other`.toUpperCase();
+
     const target = await prisma.student.create({
       data: {
         ...original,
@@ -50,8 +55,8 @@ describe('Students update (e2e)', () => {
       data: {
         firstName: 'Other',
         lastName: 'Student',
-        email: `${runTag}-other@example.com`,
-        documentNumber: `${runTag}-other`,
+        email: otherEmail,
+        documentNumber: otherDocumentNumber,
         birthDate: new Date('2001-02-02'),
       },
     });
@@ -93,6 +98,41 @@ describe('Students update (e2e)', () => {
       documentNumber: original.documentNumber,
     });
     expect(persisted?.birthDate.toISOString()).toBe('2002-03-04T00:00:00.000Z');
+  });
+
+  it('PATCH /students/:id normalizes email and documentNumber', async () => {
+    const newEmail = `  ${runTag}-NORMALIZED@EXAMPLE.COM  `;
+    const newDocument = `  ${runTag}-normalized-doc  `;
+    const expectedEmail = `${runTag}-normalized@example.com`;
+    const expectedDocument = `${runTag}-normalized-doc`.toUpperCase();
+
+    const response = await authRequest
+      .patch(`/students/${targetId}`)
+      .send({
+        email: newEmail,
+        documentNumber: newDocument,
+        firstName: '  Trimmed  ',
+        lastName: '  Name  ',
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      email: expectedEmail,
+      documentNumber: expectedDocument,
+      firstName: 'Trimmed',
+      lastName: 'Name',
+    });
+
+    // restore canonical values for subsequent tests
+    await authRequest
+      .patch(`/students/${targetId}`)
+      .send({
+        email: original.email,
+        documentNumber: original.documentNumber,
+        firstName: 'Updated',
+        lastName: original.lastName,
+      })
+      .expect(200);
   });
 
   it('PATCH /students/:id returns 409 for a duplicate email', async () => {
@@ -162,6 +202,22 @@ describe('Students update (e2e)', () => {
     await authRequest
       .patch(`/students/${targetId}`)
       .send({ firstName: '' })
+      .expect(400);
+
+    await authRequest
+      .patch(`/students/${targetId}`)
+      .send({ firstName: '   ' })
+      .expect(400);
+  });
+
+  it('PATCH /students/:id rejects future birth dates', async () => {
+    const future = new Date();
+    future.setUTCFullYear(future.getUTCFullYear() + 1);
+    const futureDate = future.toISOString().slice(0, 10);
+
+    await authRequest
+      .patch(`/students/${targetId}`)
+      .send({ birthDate: futureDate })
       .expect(400);
   });
 

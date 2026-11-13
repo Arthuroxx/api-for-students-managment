@@ -30,8 +30,8 @@ The API exposes a small, well-defined student management domain:
 
 - **Authentication:** users log in with email and password and receive a signed JWT access token.
 - **Authorization:** `ADMIN` users can read and manage students; `USER` users have read-only access.
-- **Student management:** create, list, read, update and delete students.
-- **Search and pagination:** filter students by partial first name, last name or email, with page and limit parameters.
+- **Student management:** create, list, read, update and delete students. Student input is normalized and validated (trimmed text, canonical `email`/`documentNumber`, non-future `birthDate`).
+- **Search and pagination:** filter students by partial first name, last name or email, with bounded pagination (`page` <= 10000, `limit` <= 100). Search filters treat `%` and `_` as literal characters.
 - **Health check:** `GET /health` verifies the API process and the PostgreSQL connection.
 - **Observability:** every HTTP request and error is logged as structured JSON without leaking sensitive data.
 - **Documentation:** interactive Swagger UI and an OpenAPI JSON document are served by the application.
@@ -301,7 +301,7 @@ For local development, `npx prisma migrate dev` creates new migrations when the 
 npm run db:seed
 ```
 
-The seed is idempotent: it creates the user if it does not exist, or updates the password and role if it does.
+The seed is idempotent and create-only: it creates the user if it does not exist and never updates an existing user's role or password.
 
 ### 4. Start the API
 
@@ -468,6 +468,7 @@ Prisma Client is generated into `src/generated/prisma` and connects through `@pr
 | `20261103182111_add_auth_user` | Creates the `users` table and the unique email index. |
 | `20261104155942_add_user_role` | Adds the `UserRole` enum and the `role` column. |
 | `20261105090000_add_student_performance_indexes` | Enables `pg_trgm`, adds trigram search indexes and the pagination index. |
+| `20261111090000_normalize_student_identifiers` | Normalizes existing `students.email` (trim+lowercase) and `students.documentNumber` (trim+uppercase). Aborts if normalized collisions are detected (manual resolution required). |
 
 ### Common commands
 
@@ -696,7 +697,7 @@ Returns a paginated list ordered by newest first.
 
 | Parameter | Type | Default | Constraints | Description |
 | --- | --- | --- | --- | --- |
-| `page` | integer | `1` | `>= 1` | Page number. |
+| `page` | integer | `1` | `1`–`10000` | Page number. Capped to bound `OFFSET = (page - 1) * limit` and avoid extreme/costly queries. |
 | `limit` | integer | `10` | `1`–`100` | Items per page. |
 | `firstName` | string | — | max 100 | Case-insensitive partial match. |
 | `lastName` | string | — | max 100 | Case-insensitive partial match. |
@@ -736,7 +737,7 @@ curl "http://localhost:3000/students?page=1&limit=10&firstName=ana&email=example
 
 Errors:
 
-- `400 Bad Request` for invalid pagination or filter values.
+- `400 Bad Request` for invalid pagination/filter values (including `page > 10000` or `limit > 100`).
 - `401 Unauthorized` when the token is missing, invalid or expired.
 - `403 Forbidden` when the authenticated role is not `ADMIN` or `USER`.
 
@@ -779,11 +780,11 @@ Creates a student. Requires `ADMIN`.
 
 | Field | Type | Required | Constraints |
 | --- | --- | --- | --- |
-| `firstName` | string | Yes | Non-empty, max 100. |
-| `lastName` | string | Yes | Non-empty, max 100. |
-| `email` | string | Yes | Valid email, max 255, unique. |
-| `documentNumber` | string | Yes | Non-empty, max 50, unique. |
-| `birthDate` | string | Yes | ISO 8601 date, for example `2000-05-10`. |
+| `firstName` | string | Yes | Trimmed, non-empty, max 100. |
+| `lastName` | string | Yes | Trimmed, non-empty, max 100. |
+| `email` | string | Yes | Trimmed, lowercased, valid email, max 255, unique. |
+| `documentNumber` | string | Yes | Trimmed, uppercased, non-empty, max 50, unique. |
+| `birthDate` | string | Yes | ISO 8601 date (`YYYY-MM-DD`), not in the future. |
 
 ```bash
 curl -X POST http://localhost:3000/students \
@@ -815,7 +816,7 @@ curl -X POST http://localhost:3000/students \
 
 Errors:
 
-- `400 Bad Request` for missing or invalid fields, or unknown properties.
+- `400 Bad Request` for missing or invalid fields, unknown properties, whitespace-only text values, or a future `birthDate`.
 - `401 Unauthorized` for a missing or invalid token.
 - `403 Forbidden` when the role is not `ADMIN`.
 - `409 Conflict` when the email or document number is already in use.
