@@ -1,4 +1,4 @@
-﻿-- Normalize existing student identifiers and prevent collisions before applying
+-- Normalize existing student identifiers and prevent collisions before applying
 -- canonical values.
 --
 -- Canonical forms:
