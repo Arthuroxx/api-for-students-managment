@@ -49,6 +49,8 @@ docker compose --profile seed run --rm seed
 curl http://localhost:3000/health
 ```
 
+On Windows PowerShell, create the environment file with `Copy-Item .env.example .env` and use `curl.exe` for the health check (see [Windows PowerShell notes](#windows-powershell-notes)).
+
 PostgreSQL, Prisma migrations and the API start in order. Swagger UI is available at `http://localhost:3000/api/docs`.
 
 ### Local process
@@ -63,6 +65,8 @@ npm run start:dev
 ```
 
 The API listens on `http://localhost:3000`. Log in with the credentials from `SEED_USER_EMAIL` and `SEED_USER_PASSWORD`. See [Running locally](#running-locally) and [Running with Docker Compose](#running-with-docker-compose) for details.
+
+> **Local only.** These steps assume `.env` points `DATABASE_URL` at a local PostgreSQL instance. Never use a production or shared connection string here: `npx prisma migrate deploy` and `npm run db:seed` write to whichever database `DATABASE_URL` selects. See [Keeping local setup away from production](#keeping-local-setup-away-from-production).
 
 ## Architecture
 
@@ -153,14 +157,14 @@ AllExceptionsFilter (only when an exception is thrown)
 
 | Tool | Version | Needed for |
 | --- | --- | --- |
-| Node.js | 24.x | Running the API, Prisma CLI and tests |
+| Node.js | 24.x or newer | Running the API, Prisma CLI and tests |
 | npm | 11.x or newer | Installing dependencies (`package-lock.json` is used) |
 | Docker Engine | Current release | PostgreSQL and the full container stack |
 | Docker Compose | v2 or newer | `compose.yaml` (including `service_completed_successfully` dependencies) |
-| PostgreSQL | 18 if not using Docker | Local database |
+| PostgreSQL | 18 (matches the container image) if not using Docker | Local database |
 | Git | Any recent version | Cloning the repository |
 
-The Docker image uses `node:24-bookworm-slim` and `postgres:18-alpine`.
+The Docker image uses `node:24-bookworm-slim` and `postgres:18-alpine`. The repository does not pin Node.js with an `engines` field or `.nvmrc`; `package.json` and `package-lock.json` are the source of truth for dependencies.
 
 ## Installation
 
@@ -186,16 +190,17 @@ Copy-Item .env.example .env
 Open `.env` and set at least:
 
 - `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` — credentials and database created by the PostgreSQL container.
-- `DATABASE_URL` — connection string used when running the API on the host. Update it to match the same user, password, host, port and database. If the password contains reserved URL characters, percent-encode it here; Compose does this automatically.
+- `DATABASE_URL` — connection string used when running the API on the host. Keep the host pointed at `localhost` (or wherever your local PostgreSQL runs) and make the user, password, port and database match the `POSTGRES_*` values. If the password contains reserved URL characters, percent-encode it here; Compose does this automatically.
 - `JWT_SECRET` — a random value with at least 32 characters.
+- `SEED_USER_EMAIL` and `SEED_USER_PASSWORD` — email and password of the initial local `ADMIN` user created by `npm run db:seed`.
 
-Generate a suitable JWT secret with Node.js:
+Generate a suitable JWT secret with Node.js (this one-liner works in any shell, including Windows PowerShell):
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Or with OpenSSL:
+Or with OpenSSL, when it is available (`openssl` is not installed on Windows by default):
 
 ```bash
 openssl rand -hex 32
@@ -213,9 +218,40 @@ npm ci
 
 If npm reports that the lockfile is out of sync, use `npm install` only while intentionally updating dependencies, then commit the updated lockfile.
 
+### Windows PowerShell notes
+
+The commands in this README use `bash` syntax. On Windows, use PowerShell 5.1 or PowerShell 7 and adapt them as follows:
+
+- Create the environment file with `Copy-Item .env.example .env` instead of `cp`.
+- Use `curl.exe` for the HTTP examples. In Windows PowerShell the bare name `curl` is an alias for `Invoke-WebRequest`, which does not accept `curl` flags. For example:
+
+  ```powershell
+  curl.exe http://localhost:3000/health
+  ```
+
+  The equivalent native cmdlet is:
+
+  ```powershell
+  Invoke-RestMethod http://localhost:3000/health
+  ```
+
+- PowerShell uses the backtick as its line-continuation character instead of `\`. Keep long commands on a single line, or end each continued line with a backtick.
+- `openssl` is not installed by default; generate the JWT secret with the Node.js one-liner instead.
+- `node`, `npm`, `npx` and `docker` are invoked exactly as shown.
+
 ## Environment configuration
 
 All variables are loaded from `.env` when running the API on the host. Docker Compose reads the same file but builds the API's internal `DATABASE_URL` automatically.
+
+### Keeping local setup away from production
+
+The API, the Prisma CLI and the seed all read a single connection string, `DATABASE_URL`. Every local command (`npx prisma migrate deploy`, `npx prisma migrate dev`, `npm run db:seed`, `npm run start:dev`) operates on the database that `DATABASE_URL` selects, so a production or shared connection string would make local steps modify production data. To stay safe:
+
+- Point `DATABASE_URL` at `localhost` (or your local PostgreSQL host) only. Never paste a production, staging or shared connection string into `.env`.
+- Keep production credentials out of the repository and out of `.env`; `.env` is Git-ignored and meant for local values.
+- Prefer the Docker Compose stack, which builds its own internal URL from `POSTGRES_*` and never reaches outside the machine.
+- Treat `npx prisma migrate reset` and `docker compose down -v` as destructive: they delete data in the target database and the local volume respectively.
+- The seed is create-only (it never updates or deletes rows), but it still connects to the database in `DATABASE_URL`, so keep that value local.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -234,8 +270,8 @@ All variables are loaded from `.env` when running the API on the host. Docker Co
 | `AUTH_LOGIN_RATE_TTL_MS` | No | `60000` | Login rate-limit window in milliseconds (minimum `1000`). |
 | `SEED_USER_EMAIL` | Seed only | — | Email of the initial `ADMIN` user created by `npm run db:seed` when it does not exist. |
 | `SEED_USER_PASSWORD` | Seed only | — | Password of the initial `ADMIN` user. |
-| `OBSERVE_APP_KEY` | No | placeholder | NestJS Observe application key. Leave unset to keep Observe disabled. |
-| `OBSERVE_APP_SECRET` | No | placeholder | NestJS Observe application secret. |
+| `OBSERVE_APP_KEY` | No | `YOUR_APP_KEY` | NestJS Observe application key. Leave unset to keep Observe disabled; it is not part of `.env.example`. |
+| `OBSERVE_APP_SECRET` | No | `YOUR_APP_SECRET` | NestJS Observe application secret. |
 
 ### Environment validation
 
@@ -276,7 +312,7 @@ remains pointed at `localhost` for local (`npm run start:dev`) execution.
 
 ### 1. Start PostgreSQL
 
-Use Docker for the database while running the NestJS process on the host:
+Make sure `.env` exists and points `DATABASE_URL` at a local database (see [Installation](#installation)). Use Docker for the database while running the NestJS process on the host:
 
 ```bash
 docker compose up -d postgres
@@ -317,6 +353,8 @@ Verify it:
 curl http://localhost:3000/health
 ```
 
+On Windows PowerShell, use `curl.exe http://localhost:3000/health` or `Invoke-RestMethod http://localhost:3000/health` (see [Windows PowerShell notes](#windows-powershell-notes)).
+
 Open Swagger UI at `http://localhost:3000/api/docs`.
 
 ### 5. Production-style local run
@@ -340,6 +378,8 @@ npm run start:prod
 | `npm run format` | Format TypeScript files with Prettier. |
 | `npm run lint` | Run oxlint with type-aware checks. |
 | `npm test` | Run unit tests. |
+| `npm run test:watch` | Run unit tests in watch mode. |
+| `npm run test:debug` | Run unit tests with the Node inspector enabled. |
 | `npm run test:e2e` | Run end-to-end and integration tests. |
 | `npm run test:integration` | Run only `test/integration.e2e-spec.ts`. |
 | `npm run test:cov` | Run unit tests with coverage. |
@@ -600,7 +640,7 @@ The project does not expose a public registration endpoint. `npm run db:seed` cr
 | Swagger UI | `http://localhost:3000/api/docs` |
 | OpenAPI JSON | `http://localhost:3000/api/docs-json` |
 
-All request bodies use `application/json`. Protected endpoints require the Bearer token described above. The HTTP examples use `bash` syntax; on Windows, run them in Git Bash or WSL, or adapt quoting and line continuations for PowerShell.
+All request bodies use `application/json`. Protected endpoints require the Bearer token described above. The HTTP examples use `bash` syntax; on Windows, run them in Git Bash or WSL, or use `curl.exe` (the bare `curl` name is an alias for `Invoke-WebRequest`) and adapt quoting and line continuations for PowerShell. See [Windows PowerShell notes](#windows-powershell-notes).
 
 ### Endpoint summary
 
@@ -1186,3 +1226,11 @@ seed repeatedly is safe.
 ### `pg_trgm` permission denied
 
 Use a PostgreSQL role that can create extensions, or enable `pg_trgm` through your managed database provider before running the migration.
+
+### `npm ci` fails while installing `argon2`
+
+`argon2` ships prebuilt binaries for `win32-x64`, Linux and macOS. On a platform without a prebuild (for example Windows on ARM64), npm falls back to compiling the module and needs a C++ toolchain. Install the "Desktop development with C++" workload from the Visual Studio Build Tools and retry `npm ci`.
+
+### Local commands touch the wrong database
+
+`npx prisma migrate deploy`, `npx prisma migrate dev`, `npm run db:seed` and `npm run start:dev` all use `DATABASE_URL` from `.env`. If a local step behaves unexpectedly, confirm the value points at your local PostgreSQL and not at a production or shared database. See [Keeping local setup away from production](#keeping-local-setup-away-from-production).
